@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Press the Line — 499 BCE</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+/* Disable text selection & long-press callout so taps/holds don't highlight text. */
+html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-touch-callout:none;}
+input,textarea,[contenteditable]{-webkit-user-select:text;-moz-user-select:text;-ms-user-select:text;user-select:text;-webkit-touch-callout:default;}
+html,body{width:100%;height:100%;background:#050301;font-family:'Cinzel',Georgia,serif;color:#c8a060;-webkit-font-smoothing:antialiased;overflow:hidden;}
+
+/* ── Persistent starfield ── */
+#stars{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,#120a03 0%,#070401 65%,#030100 100%);}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--d) var(--delay) infinite alternate ease-in-out;}
+@keyframes twinkle{from{opacity:.08;transform:scale(.6);}to{opacity:.75;transform:scale(1.15);}}
+
+/* ── Paged scenes (only .active is shown) ── */
+.scene{
+  display:none;
+  position:fixed;inset:0;z-index:2;
+  flex-direction:column;align-items:center;justify-content:flex-start;
+  padding:clamp(30px,5vh,60px) clamp(20px,4vw,40px) 110px;
+  overflow-y:auto;
+  animation:sceneIn .7s ease both;
+}
+.scene.active{display:flex;}
+@keyframes sceneIn{from{opacity:0;}to{opacity:1;}}
+
+.scene-inner{width:100%;max-width:860px;margin:auto 0;}
+.scene h2{
+  font-family:'Cinzel Decorative',Georgia,serif;
+  font-size:clamp(22px,4.2vw,38px);
+  font-weight:900;
+  letter-spacing:clamp(8px,2.4vw,18px);
+  color:#c9a84c;
+  text-shadow:0 0 30px rgba(201,168,76,.45),0 0 6px rgba(201,168,76,.3);
+  text-align:center;
+  margin-bottom:clamp(14px,2.5vh,28px);
+}
+.scene h2 .eyebrow{
+  display:block;
+  font-family:'Cinzel',serif;font-weight:400;
+  font-size:clamp(9px,1.7vw,12px);letter-spacing:6px;
+  color:#7a6030;text-shadow:none;
+  margin-bottom:10px;text-transform:uppercase;
+}
+.scene p{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:clamp(13px,2.1vw,15px);
+  line-height:1.7;color:#b29a68;
+  margin-bottom:13px;
+  text-align:justify;hyphens:auto;
+}
+@media (max-width:600px){.scene p{text-align:left;}}
+.scene p em{color:#d8b860;font-style:italic;}
+.scene p .name,.scene p .place{color:#e8c96b;letter-spacing:.5px;}
+.scene .pullquote{
+  font-family:'Cinzel',Georgia,serif;font-style:italic;
+  font-size:clamp(13px,2.4vw,17px);color:#d0a858;
+  text-align:center;
+  border-left:2px solid rgba(201,168,76,.35);border-right:2px solid rgba(201,168,76,.35);
+  padding:15px 20px;margin:20px auto;max-width:600px;line-height:1.5;
+}
+.scene .pullquote cite{
+  display:block;margin-top:8px;
+  font-size:clamp(9px,1.5vw,11px);letter-spacing:3px;
+  color:#7a6030;font-style:normal;text-transform:uppercase;
+}
+.ornament{text-align:center;color:rgba(201,168,76,.32);letter-spacing:8px;
+  font-size:clamp(14px,2.5vw,18px);margin:clamp(14px,2.5vh,24px) 0;}
+
+/* ── Map wrapper (Leaflet) ── */
+.map-wrap{
+  position:relative;width:100%;max-width:720px;
+  margin:0 auto clamp(16px,2.5vh,26px);
+  aspect-ratio:16/9;
+  border:1px solid rgba(201,168,76,.3);border-radius:6px;
+  box-shadow:0 0 30px rgba(201,168,76,.15),inset 0 0 60px rgba(0,0,0,.5);
+  overflow:hidden;background:#0a0a0a;
+}
+.leaflet-intro{width:100%;height:100%;background:#050301;}
+.leaflet-intro .leaflet-tile-pane{filter:sepia(.35) saturate(.65) brightness(.7) contrast(1.1);}
+.leaflet-intro .leaflet-control-attribution{display:none;}
+
+/* City markers inside intro Leaflet maps */
+.intro-city-marker{pointer-events:none;}
+.intro-city-marker .icm-halo{
+  position:absolute;left:-12px;top:-12px;width:24px;height:24px;
+  border-radius:50%;
+  animation:icmPulse 3s ease-in-out infinite;
+}
+.intro-city-marker .icm-dot{
+  position:absolute;left:-4px;top:-4px;width:8px;height:8px;
+  border-radius:50%;border:1.3px solid;
+  box-shadow:0 0 10px rgba(0,0,0,.8);
+}
+.intro-city-marker .icm-label{
+  position:absolute;left:9px;top:-20px;
+  white-space:nowrap;
+  font-family:'Cinzel',Georgia,serif;font-size:11px;font-weight:600;
+  letter-spacing:.5px;
+  text-shadow:0 0 6px rgba(0,0,0,.95),0 1px 3px rgba(0,0,0,.95),0 0 2px rgba(0,0,0,1);
+}
+.intro-city-marker.target .icm-halo{
+  left:-18px;top:-18px;width:36px;height:36px;
+  animation:icmPulseTarget 2s ease-in-out infinite;
+}
+.intro-city-marker.target .icm-dot{
+  left:-5px;top:-5px;width:10px;height:10px;border-width:1.5px;
+}
+.intro-city-marker.target .icm-label{
+  font-size:13px;letter-spacing:2px;font-weight:700;text-transform:uppercase;
+  left:-50px;top:-32px;text-align:center;width:100px;
+}
+/* Compact variant — smaller halos for crowded maps (Greek infighting scene) */
+.intro-city-marker.compact .icm-halo{
+  left:-8px;top:-8px;width:16px;height:16px;
+  animation:icmPulseCompact 3s ease-in-out infinite;
+}
+.intro-city-marker.compact .icm-dot{
+  left:-3.5px;top:-3.5px;width:7px;height:7px;
+}
+.intro-city-marker.compact .icm-label{
+  font-size:10px;left:7px;top:-18px;
+}
+@keyframes icmPulse{
+  0%,100%{transform:scale(1);opacity:.45;}
+  50%   {transform:scale(1.4);opacity:.8;}
+}
+@keyframes icmPulseCompact{
+  0%,100%{transform:scale(1);opacity:.4;}
+  50%   {transform:scale(1.2);opacity:.65;}
+}
+@keyframes icmPulseTarget{
+  0%,100%{transform:scale(1);opacity:.55;}
+  50%   {transform:scale(1.55);opacity:.9;}
+}
+
+/* ── Royal Road: dashed yellow line that flows ── */
+.leaflet-overlay-pane path.royal-road{
+  animation: roadFlow 1.8s linear infinite;
+}
+@keyframes roadFlow{
+  from{stroke-dashoffset:0;}
+  to  {stroke-dashoffset:-20;}
+}
+
+/* ── Rebel march routes: gold dashed, flows faster than the Royal Road ── */
+.leaflet-overlay-pane path.march-route{
+  animation: marchFlow 1.2s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(232,201,107,.7));
+}
+@keyframes marchFlow{
+  from{stroke-dashoffset:0;}
+  to  {stroke-dashoffset:-24;}
+}
+
+/* ── Greek conflict lines: dashed red, always visible with brightness pulse ── */
+.leaflet-overlay-pane path.greek-clash{
+  animation: greekClash 2.4s ease-in-out infinite;
+}
+.leaflet-overlay-pane path.greek-clash.c1{animation-delay:0s;}
+.leaflet-overlay-pane path.greek-clash.c2{animation-delay:.6s;}
+.leaflet-overlay-pane path.greek-clash.c3{animation-delay:1.2s;}
+.leaflet-overlay-pane path.greek-clash.c4{animation-delay:1.8s;}
+@keyframes greekClash{
+  0%,100%{opacity:.55;stroke-width:2.5;}
+  50%    {opacity:1;  stroke-width:4;}
+}
+/* Dash flow to suggest movement/conflict */
+.leaflet-overlay-pane path.greek-clash{
+  stroke-dashoffset:0;
+}
+
+/* ── Reveal-on-activate animation ── */
+.reveal{opacity:0;transform:translateY(20px);
+  transition:opacity .9s ease,transform .9s ease;
+  transition-delay:.2s;}
+.reveal-2{transition-delay:.4s;}
+.reveal-3{transition-delay:.6s;}
+.reveal-4{transition-delay:.8s;}
+.scene.active .reveal{opacity:1;transform:translateY(0);}
+
+/* Flame flicker (bounded SVG elements; safe to transform) */
+.flame{transform-origin:bottom center;transform-box:fill-box;}
+.scene.active .flame{animation:flicker 1.4s ease-in-out infinite;}
+@keyframes flicker{
+  0%,100%{transform:scale(1,1);opacity:.9;}
+  30%   {transform:scale(.92,1.08);opacity:1;}
+  60%   {transform:scale(1.05,.95);opacity:.85;}
+}
+
+/* ── Scene 1: title ── */
+#sec-title .year-big{
+  font-family:'Cinzel Decorative',Georgia,serif;
+  font-size:clamp(54px,14vw,140px);font-weight:900;
+  letter-spacing:clamp(4px,1.5vw,12px);color:#c9a84c;
+  text-align:center;line-height:1;
+  text-shadow:0 0 50px rgba(201,168,76,.6),0 0 120px rgba(201,168,76,.25),0 0 8px rgba(201,168,76,.4);
+}
+#sec-title .game-title{
+  font-family:'Cinzel',serif;
+  font-size:clamp(12px,2vw,14px);
+  letter-spacing:clamp(5px,1.4vw,10px);color:#5a4a20;
+  text-transform:uppercase;text-align:center;margin-bottom:18px;
+}
+#sec-title .tagline{
+  font-family:'Cinzel',serif;font-style:italic;
+  font-size:clamp(13px,2.3vw,17px);letter-spacing:2px;
+  color:#8a7030;text-align:center;
+  margin:28px auto 0;max-width:680px;padding:0 20px;line-height:1.7;
+  text-transform:uppercase;
+}
+
+/* ── Scene headings coloured per scene ── */
+#sec-persia h2{color:#d8a050;text-shadow:0 0 30px rgba(220,120,60,.35);}
+#sec-greece h2{color:#a8c8ff;text-shadow:0 0 30px rgba(140,180,255,.3);}
+#sec-revolt h2{color:#c9a84c;}
+#sec-darius h2{color:#e8a060;text-shadow:0 0 40px rgba(200,80,40,.45);}
+#sec-darius{background:radial-gradient(ellipse at center,rgba(40,8,4,.45) 0%,rgba(40,8,4,0) 70%);}
+
+/* ── Scene navigation buttons ── */
+.scene-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:10;
+  display:flex;justify-content:center;align-items:center;gap:16px;
+  padding:18px 20px 26px;
+  background:linear-gradient(180deg,transparent 0%,rgba(5,3,1,.85) 60%,rgba(5,3,1,.98) 100%);
+  pointer-events:none;
+}
+.scene-nav button{pointer-events:auto;}
+.btn-next,.btn-skip,.btn-begin,.btn-prev{
+  font-family:'Cinzel',serif;
+  cursor:pointer;
+  text-transform:uppercase;
+  transition:transform .18s,box-shadow .18s,filter .18s,background .18s;
+}
+.btn-next{
+  background:linear-gradient(135deg,#c9a84c,#8b6914);
+  border:1.5px solid #e8c96b;border-radius:4px;
+  color:#0a0804;font-weight:700;
+  font-size:clamp(11px,2.2vw,14px);letter-spacing:4px;
+  padding:clamp(10px,1.8vh,14px) clamp(28px,6vw,44px);
+  box-shadow:0 0 22px rgba(201,168,76,.35),0 3px 12px rgba(0,0,0,.7);
+}
+.btn-next:hover{transform:translateY(-2px);box-shadow:0 0 36px rgba(201,168,76,.55),0 6px 16px rgba(0,0,0,.7);filter:brightness(1.07);}
+.btn-next:active{transform:translateY(0) scale(.97);}
+.btn-skip,.btn-prev{
+  background:transparent;
+  border:1px solid rgba(140,110,40,.45);border-radius:4px;
+  color:#8a7030;font-weight:400;
+  font-size:clamp(10px,1.9vw,12px);letter-spacing:3px;
+  padding:clamp(9px,1.5vh,12px) clamp(18px,4vw,28px);
+}
+.btn-skip:hover,.btn-prev:hover{color:#c9a84c;border-color:rgba(201,168,76,.6);background:rgba(201,168,76,.06);}
+.btn-begin{
+  background:linear-gradient(135deg,#c9a84c,#8b6914);
+  border:1.5px solid #e8c96b;border-radius:4px;
+  color:#0a0804;font-weight:700;
+  font-size:clamp(12px,2.8vw,16px);letter-spacing:5px;
+  padding:clamp(14px,2.2vh,20px) clamp(36px,9vw,72px);
+  box-shadow:0 0 36px rgba(201,168,76,.45),0 4px 14px rgba(0,0,0,.7);
+  display:block;margin:24px auto 0;
+}
+.btn-begin:hover{transform:translateY(-2px);box-shadow:0 0 52px rgba(201,168,76,.65),0 8px 20px rgba(0,0,0,.7);filter:brightness(1.08);}
+.btn-begin:active{transform:translateY(0) scale(.98);}
+
+/* Scene counter */
+.scene-counter{
+  position:fixed;top:14px;right:18px;z-index:10;
+  font-family:'Cinzel',serif;font-size:10px;letter-spacing:4px;
+  color:#5a4820;text-transform:uppercase;
+}
+.scene-counter .sc-num{color:#c9a84c;}
+
+/* Scene 6 specifics */
+#sec-begin .faction-badge{
+  display:inline-block;padding:7px 20px;
+  border-radius:3px;font-size:10px;letter-spacing:4px;text-transform:uppercase;
+  margin-bottom:18px;
+}
+#sec-begin .faction-badge.greek{
+  background:linear-gradient(135deg,#0d1e44,#162e6a);color:#a8c8ff;
+  border:1px solid rgba(120,180,255,.45);
+  box-shadow:0 0 22px rgba(60,100,220,.3);
+}
+#sec-begin .faction-badge.persian{
+  background:linear-gradient(135deg,#3a0c04,#6a1808);color:#ffb070;
+  border:1px solid rgba(220,100,50,.45);
+  box-shadow:0 0 22px rgba(180,60,20,.3);
+}
+#sec-begin .decide{
+  font-family:'Cinzel Decorative',serif;
+  font-size:clamp(18px,3.8vw,28px);letter-spacing:3px;color:#d8b860;
+  text-align:center;margin:12px 0 28px;line-height:1.35;
+}
+#sec-begin .question{
+  font-family:Georgia,serif;font-style:italic;
+  font-size:clamp(14px,2.5vw,17px);color:#c8a860;
+  text-align:center;max-width:580px;margin:0 auto 10px;line-height:1.6;
+}
+
+/* ══════════════════ Cinematic map cutscene ══════════════════ */
+#cine-map{position:fixed;inset:0;z-index:1;background:#050301;transition:opacity .8s ease;}
+#cine-map .leaflet-tile-pane{filter:sepia(.35) saturate(.65) brightness(.7) contrast(1.1);}
+#cine-map .leaflet-control-attribution{display:none;}
+.leaflet-container{background:#050301;}
+
+/* Vignette + letterbox gradients (mask tile edges during camera motion) */
+#cine-vignette{position:fixed;inset:0;z-index:2;pointer-events:none;
+  background:
+    radial-gradient(ellipse 78% 78% at 50% 47%, rgba(0,0,0,0) 56%, rgba(5,3,1,.72) 100%),
+    linear-gradient(180deg, rgba(5,3,1,.55) 0%, rgba(5,3,1,0) 17%, rgba(5,3,1,0) 68%, rgba(5,3,1,.9) 100%);}
+
+/* Title card (transient) */
+.cine-title{position:fixed;inset:0;z-index:6;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;background:#050301;
+  opacity:0;transition:opacity 1.1s ease;pointer-events:none;}
+.cine-title.show{opacity:1;}
+.cine-title .game-title{font-family:'Cinzel',serif;font-size:clamp(12px,2vw,14px);
+  letter-spacing:clamp(5px,1.4vw,10px);color:#5a4a20;text-transform:uppercase;margin-bottom:14px;}
+.cine-title .year-big{font-family:'Cinzel Decorative',Georgia,serif;font-size:clamp(54px,14vw,140px);
+  font-weight:900;letter-spacing:clamp(4px,1.5vw,12px);color:#c9a84c;line-height:1;
+  text-shadow:0 0 50px rgba(201,168,76,.6),0 0 120px rgba(201,168,76,.25);}
+.cine-title .year-big .bce{font-size:.55em;color:#8a7030;letter-spacing:6px;}
+.cine-title .ornament{color:rgba(201,168,76,.32);letter-spacing:8px;
+  font-size:clamp(14px,2.5vw,18px);margin-top:22px;}
+
+/* Empire establishing label (fades on zoom-in) */
+.empire-label{position:fixed;left:0;right:0;top:42%;transform:translateY(-50%);z-index:4;
+  text-align:center;pointer-events:none;opacity:0;transition:opacity 1.4s ease;}
+.empire-label.show{opacity:1;}
+.empire-label .el-big{font-family:'Cinzel Decorative',Georgia,serif;font-weight:900;
+  font-size:clamp(30px,7vw,72px);letter-spacing:clamp(3px,1.2vw,10px);color:#f0c060;
+  text-shadow:0 0 26px rgba(200,60,30,.6),0 0 70px rgba(160,30,10,.45),0 2px 6px rgba(0,0,0,.9);}
+.empire-label .el-small{font-family:'Cinzel',serif;font-size:clamp(11px,2vw,16px);
+  letter-spacing:clamp(4px,1.4vw,9px);color:#d09050;text-transform:uppercase;margin-top:10px;
+  text-shadow:0 0 12px rgba(0,0,0,.9);}
+
+/* Narration caption */
+.cine-caption{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;
+  padding:0 clamp(20px,5vw,40px) clamp(70px,13vh,120px);pointer-events:none;}
+.cine-caption p{max-width:760px;margin:0;
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:clamp(22.5px,3.75vw,31.5px);line-height:1.6;color:#e6d2a0;
+  text-align:center;
+  background:rgba(0,0,0,.55);border:1px solid rgba(201,168,76,.16);
+  border-radius:14px;padding:14px 26px;
+  box-shadow:0 3px 16px rgba(0,0,0,.45);
+  text-shadow:0 2px 10px rgba(0,0,0,.95),0 0 4px rgba(0,0,0,1);
+  opacity:0;transition:opacity .8s ease;}
+.cine-caption p.show{opacity:1;}
+.cine-caption p .q{font-style:italic;color:#f0d8a0;}
+.cine-caption p .qa{display:block;margin-top:8px;font-style:normal;font-family:'Cinzel',serif;
+  font-size:.66em;font-weight:700;letter-spacing:1.5px;color:#dab863;text-transform:uppercase;}
+
+/* Skip + tap hint */
+#cine-skip{position:fixed;z-index:8;right:clamp(16px,4vw,30px);bottom:clamp(16px,4vh,30px);
+  font-family:'Cinzel',serif;cursor:pointer;text-transform:uppercase;background:rgba(10,7,4,.55);
+  border:1px solid rgba(201,168,76,.45);border-radius:4px;color:#c9a84c;font-weight:400;
+  font-size:clamp(10px,1.9vw,12px);letter-spacing:3px;padding:10px 20px;transition:all .18s;}
+#cine-skip:hover{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.8);}
+#cine-nav{position:fixed;z-index:8;left:clamp(16px,4vw,30px);bottom:clamp(16px,4vh,30px);gap:10px;}
+#cine-back,#cine-next{
+  font-family:'Cinzel',serif;cursor:pointer;text-transform:uppercase;background:rgba(10,7,4,.55);
+  border:1px solid rgba(201,168,76,.45);border-radius:4px;color:#c9a84c;font-weight:400;
+  font-size:clamp(10px,1.9vw,12px);letter-spacing:3px;padding:10px 20px;transition:all .18s;}
+#cine-back:hover,#cine-next:hover{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.8);}
+#begin-back{position:fixed;z-index:30;left:clamp(16px,4vw,30px);bottom:clamp(16px,4vh,30px);
+  font-family:'Cinzel',serif;cursor:pointer;text-transform:uppercase;background:rgba(10,7,4,.55);
+  border:1px solid rgba(201,168,76,.45);border-radius:4px;color:#c9a84c;font-weight:400;
+  font-size:clamp(10px,1.9vw,12px);letter-spacing:3px;padding:10px 20px;transition:all .18s;}
+#begin-back:hover{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.8);}
+
+/* Cinematic city markers */
+.cine-marker{pointer-events:none;}
+.cine-marker .cm-halo{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;
+  background:#c8603a;opacity:.5;animation:cmPulse 3s ease-in-out infinite;
+  transition:background .8s ease,width .5s ease,height .5s ease,left .5s ease,top .5s ease;}
+.cine-marker .cm-dot{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;
+  background:#e8c96b;border:1.3px solid #3a1808;box-shadow:0 0 10px rgba(0,0,0,.85);
+  transition:background .8s ease,border-color .8s ease;}
+.cine-marker .cm-label{position:absolute;left:9px;top:-9px;white-space:nowrap;
+  font-family:'Cinzel',Georgia,serif;font-size:12px;font-weight:600;letter-spacing:.5px;color:#e8c96b;
+  text-shadow:0 0 6px rgba(0,0,0,.95),0 1px 3px rgba(0,0,0,.95);transition:color .8s ease;}
+.cine-marker.cm-G .cm-halo{background:#6a98e0;}
+.cine-marker.cm-G .cm-dot{background:#a8c8ff;border-color:#1a2e56;}
+.cine-marker.cm-G .cm-label{color:#a8c8ff;}
+.cine-marker.cm-hi .cm-halo{left:-15px;top:-15px;width:30px;height:30px;opacity:.7;animation:cmPulseHi 1.8s ease-in-out infinite;}
+.cine-marker.cm-hi .cm-dot{left:-5px;top:-5px;width:10px;height:10px;}
+.cine-marker.cm-major .cm-halo{left:-26px;top:-26px;width:52px;height:52px;}
+.cine-marker.cm-major.cm-hi .cm-halo{left:-30px;top:-30px;width:60px;height:60px;}
+.cine-marker.cm-major .cm-label{font-size:13px;font-weight:700;letter-spacing:1.5px;}
+/* Capital cities (Athens / Persepolis): star symbol + larger centred label */
+.cine-marker.cm-capital .cm-cap-star{position:absolute;left:-36px;top:-36px;width:72px;height:72px;
+  filter:drop-shadow(0 0 7px rgba(201,168,76,.55)) drop-shadow(0 2px 3px rgba(0,0,0,.7));}
+.cine-marker.cm-capital .cm-star-svg{display:block;}
+.cine-marker.cm-capital .cm-label{left:-90px;top:34px;width:180px;text-align:center;
+  font-family:'Cinzel Decorative','Cinzel',Georgia,serif;font-size:20px;font-weight:900;
+  letter-spacing:1.5px;text-shadow:0 0 8px rgba(0,0,0,.95),0 1px 4px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,1);}
+.cine-marker.cm-flash .cm-halo{animation:cmFlash .85s ease-out;}
+.cine-marker.cm-flash .cm-dot{animation:cmFlashDot .85s ease-out;}
+@keyframes cmPulse{0%,100%{transform:scale(1);opacity:.45;}50%{transform:scale(1.4);opacity:.75;}}
+@keyframes cmPulseHi{0%,100%{transform:scale(1);opacity:.6;}50%{transform:scale(1.5);opacity:.95;}}
+@keyframes cmFlash{0%{transform:scale(1);}40%{transform:scale(2.6);opacity:1;}100%{transform:scale(1);}}
+@keyframes cmFlashDot{0%{transform:scale(1);}40%{transform:scale(2);box-shadow:0 0 22px #fff;}100%{transform:scale(1);}}
+.leaflet-overlay-pane path.empire-border{transition:opacity 1.2s ease;}
+</style>
+</head>
+<body>
+
+<div id="stars"></div>
+
+<!-- ══════════════════ Cinematic map cutscene ══════════════════ -->
+<div id="cine-map"></div>
+<div id="cine-vignette"></div>
+
+<div class="empire-label" id="empire-label">
+  <div class="el-big">Persian Empire</div>
+  <div class="el-small">cir. 499 BCE</div>
+</div>
+
+<div class="cine-caption" id="cine-caption"><p id="cap-text"></p></div>
+
+<div class="cine-title" id="cine-title">
+  <div class="game-title">Press the Line</div>
+  <div class="year-big">499 <span class="bce">BCE</span></div>
+  <div class="ornament">⸻ ⚔ ⸻</div>
+</div>
+
+<button id="cine-skip" style="display:none" onclick="skipCinematic(event)">Skip Intro</button>
+<div id="cine-nav" style="display:none">
+  <button id="cine-back" onclick="backCinematic(event)">&#9204; Back</button>
+  <button id="cine-next" onclick="nextCinematic(event)">Next &#9205;</button>
+</div>
+
+<!-- ══════════════════ Scene 6: Begin ══════════════════ -->
+<section class="scene" id="sec-begin">
+  <div class="scene-inner" style="text-align:center;margin:auto;">
+    <div class="ornament reveal">⸻ ⚔ ⸻</div>
+    <div id="faction-line" class="reveal reveal-2"><!-- populated by JS --></div>
+    <div class="decide reveal reveal-3">The year is 499 BCE.<br>The time for war has come.</div>
+    <p class="question reveal reveal-3" id="question-text"><!-- faction-specific --></p>
+    <button class="btn-begin reveal reveal-4" onclick="beginCampaign()">Begin Campaign</button>
+  </div>
+  <button id="begin-back" onclick="backToCinematic(event)">&#9204; Back</button>
+</section>
+
+<!-- (cinematic UI is inline above; no paged nav) -->
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+<script>
+// ── Starfield ──
+(function(){
+  var s = document.getElementById('stars');
+  for (var i=0; i<140; i++){
+    var el = document.createElement('div');
+    el.className = 'star';
+    var sz = Math.random()*2 + .4;
+    el.style.cssText = 'width:'+sz+'px;height:'+sz+'px;'
+      +'top:'+Math.random()*100+'%;left:'+Math.random()*100+'%;'
+      +'--d:'+(2+Math.random()*5)+'s;--delay:'+(Math.random()*4)+'s;'
+      +'opacity:'+(Math.random()*.5+.1)+';';
+    s.appendChild(el);
+  }
+})();
+
+// ── Faction gate ──
+var _playerSide = sessionStorage.getItem('playerSide');
+if (_playerSide !== 'greece' && _playerSide !== 'persia') {
+  // No faction chosen — redirect back to title
+  window.location.href = 'index.html';
+}
+
+// ── Faction-specific text on scene 6 ──
+(function(){
+  var badgeEl = document.getElementById('faction-line');
+  var qEl     = document.getElementById('question-text');
+  if (!badgeEl || !qEl) return;
+  if (_playerSide === 'greece') {
+    badgeEl.innerHTML = '<span class="faction-badge greek">You lead the Hellenic cause</span>';
+    qEl.innerHTML = 'Will you raise the banner of revolt and expand the Greek civilization from the Hellas through Persia\'s capital Persepolis — or will the fire of Ionia be extinguished before it can spread?';
+  } else {
+    badgeEl.innerHTML = '<span class="faction-badge persian">You rule the Persian Empire</span>';
+    qEl.innerHTML = 'Will you crush the Greek revolt and bind the Aegean world beneath one throne by capturing Athens and crushing democracy in its infancy — or will a few defiant cities become the breach through which your empire bleeds?';
+  }
+})();
+
+// ══════════════════ Cinematic intro ══════════════════
+// Tunable timing/camera constants — adjust in-browser to taste (ms unless noted).
+var CINE = {
+  titleHold:     3900,   // title card before fading to the empire shot
+  empireHold:    12000,  // establishing "largest empire" beat (line 1 — extra time)
+  flyPersepolis: 8800,   // zoom from empire view down to Persepolis (line 2 — slower)
+  restPersepolis:4200,   // rest on Persepolis after arrival (line 2 — extra time)
+  panZoomFrac:   0.5,    // pan happens at this fraction of the way from empire-zoom to Greece-fit zoom
+  pre:           750,    // pause (ms) before showing text lines 1-5; camera keeps moving during it
+  panMs:         15400,  // duration of the Persepolis -> Susa -> Mardin -> Mazaka -> Sardis -> Athens pan (slowed)
+  zoomAthens:    9800,   // slow zoom-in toward Athens once the pan arrives (line 4 — slower)
+  beatGreece:    5900,   // extra read time after the Athens zoom settles (line 4)
+  flyGreece:     7300,   // (retained) generic Greece move duration
+  flyIonia:      5900,   // zoom-out to frame Greece + the Ionian coast (slowed)
+  beatIonia:     4800,   // extra read time after Ionia settles
+  beatRevolt:    8250,   // "led to revolt by a tyrant..." hold
+  beatSwitch:    1650,   // pause on the red->blue flash before the final line
+  beatFinal:     8250,   // final line hold before cutting to Begin
+  flyEase:       0.2     // flyTo easeLinearity (lower = more cinematic easing)
+};
+
+var TILE_URL  = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+var TILE_OPTS = { subdomains:'0123', maxZoom:14, minZoom:2, keepBuffer:3 };
+
+// City coordinates (matched to the campaign map's data)
+// ── Map data copied from ancient-map.html (cities, roads) ──
+var ROSTER = [
+  [38,23.73,'Athens','G',1],
+  [37.08,22.43,'Sparta','G',1],
+  [37.94,22.93,'Corinth','G',1],
+  [38.32,23.32,'Thebes','G',1],
+  [38.48,22.5,'Delphi','G',1],
+  [37.64,21.63,'Olympia','G',0],
+  [37.64,22.72,'Argos','G',1],
+  [38.15,23.97,'Marathon','G',0],
+  [38.82,22.53,'Thermopylae','G',0],
+  [39.63,22.42,'Larissa','G',0],
+  [40.76,19.48,'Apollonia','G',0],
+  [40.64,22.94,'Therma','G',0],
+  [39.16,21,'Ambracia','G',0],
+  [40.21,22.42,'Aigai','G',0],
+  [37.52,27.28,'Miletus','I',1],
+  [37.94,27.36,'Ephesus','I',1],
+  [38.42,27.14,'Smyrna','I',1],
+  [37.05,27.42,'Halicarnassus','I',1],
+  [39.95,26.24,'Troy','P',0],
+  [41.02,28.98,'Byzantium','P',0],
+  [40.18,26.42,'Abydos','P',0],
+  [42.02,35.15,'Sinope','P',0],
+  [36.44,28.22,'Rhodes','P',0],
+  [36.64,29.17,'Xanthos','P',0],
+  [36.91,30.72,'Perge','P',0],
+  [38.06,30.16,'Kelainai','P',0],
+  [37.72,26.98,'Samos','I',1],
+  [39.22,26.52,'Lesbos','I',1],
+  [39.04,26.9,'Atarneus','I',1],
+  [39.48,26.22,'Assos','P',0],
+  [38.96,27.83,'Pelopia','P',0],
+  [40.27,27.59,'Cyzicus','P',0],
+  [38.46,23.6,'Chalcis','G',0],
+  [37.81,21.36,'Elis','G',0],
+  [38.22,21.75,'Patrae','G',0],
+  [38.6,21.61,'Thurmum','G',0],
+  [38.9,20.97,'Thyreum','G',0],
+  [29.93,52.89,'Persepolis','P',1],
+  [32.19,48.26,'Susa','P',1],
+  [32.54,44.42,'Babylon','P',1],
+  [36.36,43.15,'Nineveh','P',1],
+  [38.48,27.98,'Sardis','P',1],
+  [30.19,53.17,'Pasargadae','P',1],
+  [34.8,48.52,'Ecbatana','P',1],
+  [39.65,32,'Gordion','P',0],
+  [39.93,32.86,'Ancyra','P',0],
+  [36.91,34.9,'Tarsus','P',0],
+  [36.2,36.2,'Antioch','P',0],
+  [33.51,36.32,'Damascus','P',0],
+  [33.27,35.2,'Tyre','P',0],
+  [33.56,35.37,'Sidon','P',0],
+  [31.5,34.47,'Gaza','P',0],
+  [29.84,31.25,'Memphis','P',1],
+  [36.87,39.02,'Harran','P',0],
+  [33.1,44.58,'Ctesiphon','P',0],
+  [31.31,45.65,'Orkhoe','P',0],
+  [29.58,35,'Elath','P',0],
+  [35.2,45.92,'Me-Turan','P',0],
+  [31.7,55.31,'Yasatis','P',0],
+  [40,34.5,'Pteria','P',0],
+  [38.78,35.46,'Mazaka','P',0],
+  [38.31,36.33,'Komana','P',0],
+  [38.32,38.28,'Melitene','P',0],
+  [36.8,38,'Thapsacus','P',0],
+  [36.2,37.17,'Halab','P',0],
+  [36.99,40.5,'Mardin','P',0],
+  [38.48,43.39,'Thospia','P',0],
+  [40.99,39.73,'Trapezous','P',0],
+  [40.95,24.94,'Abdera','P',0],
+  [40.73,26.09,'Aenus','P',0],
+  [40.98,27.93,'Perinthos','P',0],
+  [36.18,44.01,'Arbela','P',0],
+  [37,46.2,'Gazaka','P',0],
+  [35.63,51.42,'Ragai','P',0],
+  [32.26,35.19,'Sameria','P',0],
+  [31.76,35.24,'Hierosolyma','P',0],
+  [31.02,32.56,'Pelousion','P',0],
+  [30.82,30.82,'Sais','P',0],
+  [29.21,25.6,'Ammonion','P',0],
+  [32.88,21.95,'Kyrene','P',0],
+  [32.49,20.84,'Barke','P',0],
+  [27.62,38.55,'Tema','P',0],
+  [29.72,40.1,'Doumaitha','P',0],
+  [32.63,51.72,'Gabai','P',0],
+  [27.04,57.03,'Hormozeia','P',0],
+  [36.16,54.4,'Hekatompylos','P',0],
+  [36.82,54.42,'Zadrakarta','P',0],
+  [30.27,57.12,'Karmana','P',0],
+  [29.08,58.38,'Bam','P',0],
+  [27.18,60.68,'Poura','P',0],
+  [32.36,62.05,'Phrada','P',0],
+  [26.2,66.3,'Rambakia','P',0],
+  [24.75,67.93,'Pattala','P',0],
+  [26.43,67.82,'Sindomana','P',0],
+  [33.76,72.86,'Taxila','P',0],
+  [34.01,71.98,'Peukela','P',0],
+  [34.52,69.2,'Ortospana','P',0],
+  [34.98,69.57,'Kapisa','P',0],
+  [31.63,65.76,'Arakhotoi','P',0],
+  [34.33,62.18,'Artakoana','P',0],
+  [36.47,59.51,'Sousia','P',0],
+  [37.69,62.16,'Margos','P',0],
+  [36.74,68.86,'Drapsaka','P',0],
+  [36.75,66.88,'Zariaspa','P',0],
+  [39.04,66.84,'Nautaka','P',0],
+  [39.68,66.98,'Marakanda','P',0],
+  [40.17,69.3,'Kyroupolis','P',0],
+];
+
+var ROADS_SECONDARY = [
+    [[38.0,23.73],[37.94,22.93]],
+    [[38.0,23.73],[38.15,23.97]],
+    [[38.0,23.73],[38.46,23.60]],
+    [[37.08,22.43],[37.64,21.63]],
+    [[37.08,22.43],[37.64,22.72]],
+    [[37.94,22.93],[37.64,22.72]],
+    [[37.64,21.63],[37.81,21.36]],
+    [[37.81,21.36],[38.22,21.75]],
+    [[38.22,21.75],[37.94,22.93]],
+    [[38.48,22.50],[38.60,21.61]],
+    [[38.60,21.61],[38.90,20.97]],
+    [[38.32,23.32],[37.94,22.93]],
+    [[38.32,23.32],[38.46,23.60]],
+    [[38.32,23.32],[38.48,22.50]],
+    [[38.32,23.32],[38.82,22.53]],
+    [[38.48,22.50],[38.82,22.53]],
+    [[38.82,22.53],[39.63,22.42]],
+    // ── Northern Greece / Epirus / Macedonia / Thrace network ──
+    // (Ambracia, Aigai, Apollonia, Therma, Abdera)
+    [[38.90,20.97],[39.16,21.00]],
+    [[39.63,22.42],[39.92,22.60],[40.21,22.42]],
+    [[39.16,21.00],[39.74,21.00],[39.59,22.06],[39.63,22.42]],
+    [[40.76,19.48],[40.25,19.67],[39.67,20.31],[39.16,21.00]],
+    [[40.76,19.48],[41.24,20.74],[40.78,21.88],[40.64,22.94]],
+    [[40.21,22.42],[40.50,22.51],[40.64,22.94]],
+    // Therma↔Abdera — note: dev tool emitted this starting from (40.64,22.95)
+    // which was Thessaloniki's coord; corrected to Therma's actual (40.64,22.94)
+    // so the adjacency edge anchors at Therma rather than dangling.
+    [[40.64,22.94],[40.58,23.54],[40.80,23.76],[41.00,24.68],[40.95,24.94]],
+    // ── Thracian / Hellespont chain (Abdera, Aenus, Perinthos, Byzantium, Abydos) ──
+    [[40.95,24.94],[41.13,25.14],[40.96,25.67],[40.93,25.92],[40.73,26.09]],
+    [[40.73,26.09],[40.92,26.31],[40.88,26.76],[41.08,27.33],[40.98,27.93]],
+    [[40.73,26.09],[40.74,26.75],[40.60,26.87],[40.18,26.42]],
+    [[40.98,27.93],[41.09,28.17],[40.97,28.72],[41.02,28.98]],
+    [[40.18,26.42],[39.95,26.24]],
+    // ── Asia Minor coastal / Mysia network (Assos, Pelopia, Cyzicus, Atarneus, Lesbos) ──
+    [[39.95,26.24],[39.48,26.22]],
+    [[40.27,27.59],[40.31,27.08],[40.18,26.42]],
+    [[39.04,26.90],[38.96,27.83]],
+    [[39.04,26.90],[39.22,26.52]],
+    [[39.48,26.22],[39.62,27.15],[39.04,26.90]],
+    [[40.27,27.59],[39.68,27.52],[38.96,27.83]],
+    [[38.96,27.83],[38.48,27.98]],
+    [[39.04,26.90],[38.84,27.15],[38.42,27.14]],
+    [[38.42,27.14],[37.94,27.36]],
+    [[37.94,27.36],[37.52,27.28]],
+    [[37.52,27.28],[37.72,26.98]],
+    [[37.52,27.28],[37.05,27.42]],
+    [[37.05,27.42],[36.44,28.22]],
+    [[38.42,27.14],[38.48,27.98]],
+    // ── Pontos / Black Sea coastal route to Sinope ──
+    [[40.27,27.59],[40.30,29.42],[40.56,29.14],[40.68,30.16],[40.90,29.47],[41.02,28.98]],
+    [[41.02,28.98],[41.19,29.18],[41.11,30.17],[40.87,31.10],[40.74,31.47],[40.73,31.70],[40.91,32.92],[41.00,33.71],[41.43,33.91],[41.46,34.16],[41.64,34.43],[42.02,35.15]],
+    [[39.93,32.86],[40.09,31.97],[40.05,31.01],[40.20,30.26],[40.30,29.93],[40.69,30.53],[41.02,28.98]],
+    // ── Aegean → Lycia / Pamphylia / Phrygia (Xanthos, Perge, Kelainai) ──
+    [[38.15,23.97],[37.24,24.92],[37.50,26.80],[37.31,26.93],[37.52,27.28]],
+    [[38.48,27.98],[38.40,28.43],[38.16,28.84],[37.75,29.27],[37.29,29.43],[36.75,29.40],[36.64,29.17]],
+    [[36.64,29.17],[36.36,29.33],[36.22,29.72],[36.55,30.55],[36.73,30.46],[36.91,30.72]],
+    [[36.91,30.72],[37.20,30.60],[37.71,29.93],[37.92,30.41],[38.06,30.16]],
+    [[36.2,36.2],[35.64,35.92],[35.23,35.97],[34.89,35.89],[34.53,36.02],[33.88,35.58],[33.56,35.37]],
+    [[33.56,35.37],[33.27,35.20]],
+    [[33.27,35.20],[33.51,36.32]],
+    [[33.27,35.20],[31.50,34.47]],
+    // Susa → Persepolis (secondary road; Royal Road ends at Susa)
+    [[32.19,48.26],[31.0,50.0],[30.2,51.5],[29.93,52.89]],
+    [[29.93,52.89],[30.19,53.17]],
+    // ── Mardin connector network (eastern Anatolia / Lake Van / Pontic coast) ──
+    // Mardin → Thospia (Lake Van)
+    [[36.99,40.5],[37.64,40.72],[38.07,42],[37.87,42.95],[38.48,43.39]],
+    // Thospia → Trapezous (Armenian highland)
+    [[38.48,43.39],[38.75,43.35],[38.95,43.7],[39.65,42.32],[39.96,41.07],[39.96,40.47],[40.48,39.94],[40.68,39.29],[40.99,39.73]],
+    // Trapezous → Sinope (Black Sea coastal route)
+    [[40.99,39.73],[41.07,39.41],[40.89,38.49],[40.99,37.53],[41.23,36.42],[41.62,35.52],[41.74,35.16],[42.02,35.15]],
+    // Perge → Tarsus (southern coastal route)
+    [[36.91,30.72],[36.81,31.37],[36.54,32.06],[36.08,32.65],[36.21,33.68],[36.82,34.63],[36.91,34.9]],
+    // Tarsus → Kelainai (interior Anatolian route)
+    [[36.91,34.9],[37.33,34.78],[37.54,35.03],[37.77,33.93],[37.5,33.21],[38.57,31.21],[38.66,30.98],[38.06,30.16]],
+    // Tarsus → Antioch
+    [[36.91,34.9],[37.02,35.81],[36.86,36.24],[36.2,36.2]],
+    // Antioch → Halab
+    [[36.2,36.2],[36.2,36.6],[36.08,36.94],[36.2,37.17]],
+    // Halab → Thapsacus
+    [[36.2,37.17],[36.8,38]],
+    // Thapsacus → Harran (replaces deleted Antioch→Harran and Damascus→Harran)
+    [[36.8,38],[36.69,38.37],[36.87,39.02]],
+    // Thapsacus → Damascus (replaces deleted direct route)
+    [[36.8,38],[36.53,38.21],[36.09,38],[35.8,38.29],[35.78,38.68],[35.28,39.23],[34.69,38.29],[34.28,37.36],[33.51,36.32]],
+    // ── Caspian / Ecbatana hub network ──
+    // Thospia → Gazaka (Lake Van → Media Atropatene)
+    [[38.48,43.39],[39.34,44.51],[38.98,45.09],[38.43,45.54],[38.35,46.21],[37.59,45.83],[37,46.2]],
+    // Gazaka → Zadrakarta (Caspian southern shore)
+    [[37,46.2],[37.27,47.19],[37.11,47.65],[37.34,48.2],[37.55,48.2],[37.45,49.28],[37.11,50.22],[36.7,50.99],[36.52,51.93],[36.48,52.88],[36.68,53.45],[36.82,54.42]],
+    // Zadrakarta → Hekatompylos
+    [[36.82,54.42],[36.95,54.89],[37.13,55.15],[36.94,55.48],[36.47,55.01],[36.16,54.4]],
+    // Hekatompylos → Ragai
+    [[36.16,54.4],[35.93,53.94],[34.97,53.02],[35.63,51.42]],
+    // Ragai → Ecbatana
+    [[35.63,51.42],[35.29,50.48],[35.22,49.43],[35.11,48.82],[34.8,48.52]],
+    // Gazaka → Ecbatana (direct)
+    [[37,46.2],[36.2,47.43],[35.82,47.85],[34.8,48.52]],
+    // ── Levant interior (Damascus → Sameria → Hierosolyma → Gaza) ──
+    [[33.51,36.32],[32.69,35.63],[32.26,35.19]],
+    [[32.26,35.19],[31.76,35.24]],
+    [[31.76,35.24],[31.5,34.47]],
+    // ── Hierosolyma → Arabian frontier (Doumaitha → Tema) ──
+    [[31.76,35.24],[31.8,36.88],[29.79,39.48],[29.72,40.1]],
+    [[29.72,40.1],[29.65,39.41],[27.62,38.55]],
+    // ── Egypt / Sinai / Western Desert / Cyrenaica ──
+    // Gaza → Pelousion (Sinai north-coast route)
+    [[31.5,34.47],[31.19,34.07],[31.09,33.71],[31.05,33.45],[30.98,32.81],[31.02,32.56]],
+    // Pelousion → Sais (Delta north)
+    [[31.02,32.56],[31.01,32.07],[30.56,31.48],[30.82,30.82]],
+    // Memphis → Sais (Delta apex to capital)
+    [[29.84,31.25],[30.16,31.26],[30.39,31.05],[30.82,30.82]],
+    // Memphis → Ammonion (Western Desert oasis route)
+    [[29.84,31.25],[29.47,29.81],[28.96,28.9],[28.12,29.07],[27.79,28.54],[28.35,28.43],[28.78,26.98],[29.21,25.6]],
+    // Sais → Kyrene (long Mediterranean coastal route)
+    [[30.82,30.82],[31.2,30.01],[30.73,29.08],[31.03,28.4],[31.15,27.43],[31.57,25.93],[31.44,25.21],[31.76,25.04],[32.3,23.02],[32.69,22.74],[32.88,21.95]],
+    // Kyrene → Barke
+    [[32.88,21.95],[32.9,21.64],[32.74,21.43],[32.57,21.68],[32.49,20.84]],
+    // ── Mesopotamia connectors ──
+    // Thapsacus → Ctesiphon (across Syrian desert / mid-Euphrates)
+    [[36.8,38],[36.19,38.95],[35.84,39.11],[35.69,39.79],[34.47,40.9],[34.33,41.11],[34.43,41.94],[33.49,42.99],[33.34,43.65],[33.11,44.06],[33.1,44.58]],
+    // Harran → Mardin
+    [[36.87,39.02],[36.67,39.24],[36.73,39.7],[36.83,40.09],[36.99,40.5]],
+    // ── Persis / Media interior ──
+    // Ecbatana → Gabai (Zagros to central plateau)
+    [[34.8,48.52],[34.54,48.88],[34.31,48.64],[33.99,49.21],[34.12,49.83],[33.75,49.99],[32.88,51.51],[32.63,51.72]],
+    // Persepolis → Hormozeia (south to the Persian Gulf)
+    [[29.93,52.89],[29.3,52.91],[28.8,53.53],[28.82,54.05],[28.55,54.73],[28.09,55.34],[27.95,55.99],[27.68,56.54],[27.04,57.03]],
+    // ── Aria / Margiana / Bactria / Sogdiana ──
+    // Hekatompylos → Sousia
+    [[36.16,54.4],[36.26,55.1],[36.54,55.77],[36.66,56.34],[36.8,56.87],[35.97,59.45],[36.12,59.67],[36.47,59.51]],
+    // Sousia → Margos
+    [[36.47,59.51],[36.12,60.1],[36.07,60.68],[36.37,60.55],[36.84,60.75],[37.32,61.35],[37.69,62.16]],
+    // Margos → Marakanda (Margiana → Sogdiana)
+    [[37.69,62.16],[38.96,63.54],[39.88,64.35],[40.2,64.88],[40.17,65.35],[39.68,66.98]],
+    // Marakanda → Kyroupolis (Sogdiana up to the Jaxartes)
+    [[39.68,66.98],[39.84,67.57],[40.11,67.75],[39.99,68.2],[40.13,68.6],[40.17,69.3]],
+    // Marakanda → Nautaka
+    [[39.68,66.98],[39.37,67.09],[39.04,66.84]],
+    // Nautaka → Zariaspa (Bactra)
+    [[39.04,66.84],[38.78,66.49],[38.56,66.3],[37.98,66.8],[37.51,66.84],[37.27,67.22],[36.75,66.88]],
+    // Zariaspa → Drapsaka (Bactra → Kunduz)
+    [[36.75,66.88],[37.09,67.76],[36.89,68.05],[36.95,68.51],[36.74,68.86]],
+    // ── Hindu Kush / Gandhara / Indus ──
+    // Drapsaka → Kapisa (across the Hindu Kush passes)
+    [[36.74,68.86],[36.1,68.7],[35.81,68.79],[35.16,69.18],[34.98,69.57]],
+    // Kapisa → Ortospana
+    [[34.98,69.57],[34.94,69.14],[34.71,69.02],[34.52,69.2]],
+    // Ortospana → Peukela (Kabul → Pushkalavati)
+    [[34.52,69.2],[34.47,70.22],[34.35,70.61],[34.16,71.02],[34.01,71.98]],
+    // Peukela → Taxila
+    [[34.01,71.98],[33.76,72.86]],
+    // Taxila → Sindomana (Punjab → lower Indus)
+    [[33.76,72.86],[33.09,71.6],[32.97,71.09],[32.52,71.22],[32.35,71.36],[31.27,70.76],[29.93,70.72],[29.09,70.63],[27.87,68.7],[27.61,68.24],[26.86,67.82],[26.43,67.82]],
+    // Sindomana → Pattala (Indus delta)
+    [[26.43,67.82],[26.01,68.21],[25.76,68.33],[25.36,68.32],[24.97,68.2],[24.75,67.93]],
+    // Pattala → Rambakia (Indus delta to Gedrosian coast)
+    [[24.75,67.93],[24.72,67.42],[24.78,67.02],[25.21,66.76],[25.48,66.6],[25.99,66.56],[26.2,66.3]],
+    // Hormozeia → Bam (rerouted; was direct Hormozeia → Karmana)
+    [[27.04,57.03],[28.02,57.58],[28.41,57.92],[28.75,57.79],[29.03,57.9],[29.08,58.38]],
+    // Bam → Karmana
+    [[29.08,58.38],[29.3,57.93],[29.74,57.54],[30.27,57.12]],
+    // Phrada → Bam (was Karmana → Phrada, now anchored at Bam)
+    [[32.36,62.05],[31.7,61.13],[30,60.85],[29.4,61.05],[29.85,60.57],[29.84,59.88],[29.48,59.82],[28.96,59.43],[28.74,59.1],[28.81,58.51],[29.08,58.38]],
+    // Bam → Poura (Makran feeder)
+    [[29.08,58.38],[28.68,58.52],[28.25,58.8],[27.74,58.72],[27.18,60.68]],
+    // Poura → Rambakia (was tail of Hormozeia → Rambakia, now anchored at Poura)
+    [[27.18,60.68],[26.92,60.92],[26.88,61.25],[26.41,61.63],[25.6,61.74],[25.33,61.99],[25.3,63.08],[25.54,64.33],[25.66,65.47],[26.2,66.3]],
+    // ── Elath / Levant frontier — replaces deleted Gaza→Tema and Tema→Memphis routes ──
+    // Tema → Elath (Hejaz to Gulf of Aqaba)
+    [[27.62,38.55],[27.77,37.63],[28.38,36.94],[28.32,36.35],[28.99,35.81],[29.3,35.44],[29.58,35]],
+    // Elath → Memphis (down the Sinai west coast through Suez)
+    [[29.58,35],[29.47,34.44],[29.32,34.3],[29.43,34.09],[29.83,33.89],[30.04,32.98],[29.93,32.77],[29.97,32.54],[29.95,31.67],[29.84,31.25]],
+    // Gaza → Elath (Negev/Wadi Arabah)
+    [[31.5,34.47],[30.79,34.93],[30.26,35],[29.58,35]],
+    // ── Me-Turan connectors (replaces deleted Ecbatana→Ctesiphon Zagros descent) ──
+    // Ecbatana → Me-Turan
+    [[34.8,48.52],[34.75,47.87],[34.32,47.84],[34.17,46.94],[34.66,46.1],[35.2,45.92]],
+    // Me-Turan → Susa (alternate Mesopotamia → Elam route)
+    [[35.2,45.92],[34.14,45.49],[33.01,46.58],[32.5,47.31],[32.19,48.26]],
+    // ── Yasatis hub (Iranian plateau) — replaces deleted Pasargadae→Gabai/Karmana ──
+    // Karmana → Yasatis
+    [[30.27,57.12],[30.83,56.21],[31.25,55.93],[31.7,55.31]],
+    // Yasatis → Gabai (via central plateau)
+    [[31.7,55.31],[31.91,54.32],[32.51,53.86],[32.31,52.86],[32.63,51.72]],
+    // Yasatis → Pasargadae
+    [[31.7,55.31],[31.62,54.65],[31.41,54.52],[31.23,53.99],[31.11,53.75],[30.68,53.59],[30.19,53.17]],
+    // ── Drangiana / Arachosia / Paropamisadae interior connectors ──
+    // Phrada → Arakhotoi (Drangiana → Arachosia)
+    [[32.36,62.05],[31.78,64.73],[31.48,65.33],[31.63,65.76]],
+    // Arakhotoi → Ortospana (Kandahar → Kabul)
+    [[31.63,65.76],[32.14,66.78],[32.69,67.53],[33.34,68.31],[33.97,68.74],[34.33,68.86],[34.52,69.2]],
+    // Phrada → Artakoana (Drangiana → Aria)
+    [[32.36,62.05],[32.51,63.06],[32.81,62.76],[33.21,63.03],[33.69,62.3],[34.33,62.18]],
+    // Sousia → Artakoana
+    [[36.47,59.51],[36.1,59.74],[35.75,59.86],[35.29,60.6],[34.68,61.08],[34.34,61.5],[34.33,62.18]],
+    // Artakoana → Zariaspa (Aria → Bactria, long northeast trek)
+    [[34.33,62.18],[34.44,63.22],[34.66,63.67],[35.14,64.35],[35.29,64.89],[35.55,65.09],[35.82,65.28],[36.06,64.94],[36.55,64.94],[36.62,65.67],[36.63,66.49],[36.75,66.88]]
+];
+var ROADS_ROYAL = [
+    // Sardis → Kelainai (southern Lydia branch)
+    [[38.48,27.98],[38.34,28.81],[38.03,29.25],[37.85,29.77],[38.06,30.16]],
+    // Kelainai → Gordion (Phrygian highland)
+    [[38.06,30.16],[38.72,30.41],[39.04,31.13],[39.43,31.51],[39.65,32.00]],
+    // Gordion → Ancyra direct (replaces deleted secondary road)
+    [[39.65,32.00],[39.93,32.86]],
+    // Pteria → Ancyra (parallel to source Royal Road; goes via different waypoints)
+    [[40.00,34.50],[40.20,34.35],[39.99,34.10],[39.83,33.55],[39.93,33.39],[39.93,32.86]],
+    // Pteria → Mazaka (Cappadocian branch)
+    [[40.00,34.50],[39.75,34.67],[39.47,34.44],[38.93,35.08],[38.78,35.46]],
+    // Mazaka → Komana
+    [[38.78,35.46],[38.31,36.33]],
+    // Komana → Melitene
+    [[38.31,36.33],[37.78,36.5],[37.92,36.82],[38.1,37.6],[38.32,38.28]],
+    // Melitene → Mardin
+    [[38.32,38.28],[38.38,39.39],[38.08,40.09],[37.79,40.43],[36.99,40.5]],
+    // Mardin → Nineveh (rejoins source Royal Road)
+    [[36.99,40.5],[36.54,41.38],[36.28,42.83],[36.36,43.15]],
+    // Nineveh → Arbela
+    [[36.36,43.15],[36.18,44.01]],
+    // Arbela → Me-Turan (Royal Road rerouted via Me-Turan)
+    [[36.18,44.01],[35.75,44.21],[35.06,45.57],[35.2,45.92]],
+    // Me-Turan → Ctesiphon
+    [[35.2,45.92],[33.74,44.69],[33.1,44.58]],
+    // Ctesiphon → Babylon
+    [[33.1,44.58],[32.54,44.42]],
+    // Babylon → Orkhoe (down the Euphrates through Sumer)
+    [[32.54,44.42],[32.18,44.7],[31.98,45.22],[31.64,45.23],[31.31,45.65]],
+    // Orkhoe → Susa (terminus)
+    [[31.31,45.65],[31.03,46.69],[31.48,46.99],[31.8,47.46],[32.19,48.26]]
+];
+var IONIAN = ['Lesbos','Atarneus','Smyrna','Ephesus','Samos','Miletus','Halicarnassus'];
+
+// Padded bounding box of all cities — same rule the game uses (lat pad 16%, lon pad 8%)
+var PLAY_BOUNDS = (function(){
+  var la=[], lo=[];
+  ROSTER.forEach(function(c){ la.push(c[0]); lo.push(c[1]); });
+  var minLa=Math.min.apply(null,la), maxLa=Math.max.apply(null,la);
+  var minLo=Math.min.apply(null,lo), maxLo=Math.max.apply(null,lo);
+  var pLa=(maxLa-minLa)*0.16, pLo=(maxLo-minLo)*0.08;
+  return L.latLngBounds([minLa-pLa, minLo-pLo],[maxLa+pLa, maxLo+pLo]);
+})();
+
+// Framing
+var GREECE_BOUNDS = L.latLngBounds([36.2,20.4],[40.2,24.9]);   // mainland Greece
+var PERSEPOLIS    = [29.93,52.89];
+var ATHENS        = [38.00,23.73];
+// Pan route from Persepolis toward Athens, tracing the Royal Road corridor west
+var PAN_ROUTE = [
+  [32.19,48.26],  // Susa
+  [36.99,40.50],  // Mardin
+  [38.78,35.46],  // Mazaka
+  [38.48,27.98],  // Sardis
+  [38.00,23.73]   // Athens
+];
+var IONIA_BOUNDS  = L.latLngBounds([36.5,21.6],[39.6,28.0]);    // Greece + Ionian coast
+
+// Stylized Achaemenid extent — smoothed into a rounded blob for the border
+var EMPIRE_ANCHORS = [
+  [41.6,23.9],  [42.1,29.2],  [42.9,35.0],  [42.1,40.2],  [42.3,50.0],
+  [42.1,60.0],  [41.6,68.0],  [41.3,70.8],  [36.0,75.0],  [32.6,75.0],
+  [27.5,72.5],  [23.4,68.6],  [23.6,64.8],  [25.0,61.8],  [25.4,57.0],
+  [26.0,52.5],  [25.6,47.5],  [25.3,42.0],  [26.6,37.7],  [28.2,33.8],
+  [28.7,30.3],  [28.4,26.8],  [28.0,24.4],  [30.6,22.2],  [31.9,19.7],
+  [34.0,20.2],  [34.4,23.6],  [35.2,26.6],  [35.9,28.9],  [36.7,26.5],
+  [38.2,25.6],  [39.7,25.6],  [40.7,24.3]
+];
+
+var map, greeceZoom, empireZoom, panZoom, _markers={}, _empireBorder=null, _roadLayer=null, _panRAF=null, _tiles=null, _roadRenderer=null;
+
+// ── Smooth-zoom patch ───────────────────────────────────────────────
+// flyTo re-projects every animation frame and rounds each tile level's
+// transform to whole pixels (GridLayer._setZoomTransform → .round()). During a
+// slow cinematic fly that rounded value flips ±1px frame-to-frame, which reads
+// as the tiles "trembling". While _cineSmoothZoom is on we reproduce the exact
+// same transform WITHOUT the rounding, so tiles track sub-pixel and move
+// smoothly (a hair softer in motion; crisp again the moment the flag clears and
+// Leaflet re-rounds). Leaflet is pinned to 1.9.4, so this internal is stable.
+(function(){
+  if(!window.L || !L.GridLayer) return;
+  var proto = L.GridLayer.prototype, orig = proto._setZoomTransform;
+  proto._setZoomTransform = function(level, center, zoom){
+    if(!window._cineSmoothZoom){ return orig.call(this, level, center, zoom); }
+    var m = this._map,
+        scale = m.getZoomScale(zoom, level.zoom),
+        translate = level.origin.multiplyBy(scale)
+            .subtract(m._getNewPixelOrigin(center, zoom));   // no .round()
+    if(L.Browser.any3d){ L.DomUtil.setTransform(level.el, translate, scale); }
+    else { L.DomUtil.setPosition(level.el, translate); }
+  };
+})();
+
+// Same idea for city markers — but Marker.update positions via
+// latLngToLayerPoint(), which ROUNDS the projected point internally (before it
+// even subtracts the origin), so removing the outer round wasn't enough. While
+// a dive runs, project the marker directly and subtract the (un-rounded) origin
+// so the dots/labels stay fully sub-pixel and stop shimmering.
+(function(){
+  if(!window.L || !L.Marker) return;
+  var mproto = L.Marker.prototype, morig = mproto.update;
+  mproto.update = function(){
+    if(window._cineSmoothZoom && this._icon && this._map){
+      var m = this._map;
+      this._setPos(m.project(this._latlng)._subtract(m.getPixelOrigin()));   // no rounding
+      return this;
+    }
+    return morig.call(this);
+  };
+})();
+
+// ROOT CAUSE: every layer subtracts Map._getNewPixelOrigin(center, zoom), which
+// ends in ._round(). As the fly moves the center continuously, that rounded
+// origin flips ±1px frame-to-frame, and tiles + roads + markers all subtract
+// the same snapped value — so they tremble TOGETHER, locked to each other.
+// Un-rounding the origin (only while a dive runs) makes the whole coordinate
+// system track sub-pixel, so everything moves smoothly and stays aligned.
+(function(){
+  if(!window.L || !L.Map) return;
+  var mp = L.Map.prototype, orig = mp._getNewPixelOrigin;
+  mp._getNewPixelOrigin = function(center, zoom){
+    if(!window._cineSmoothZoom){ return orig.call(this, center, zoom); }
+    var viewHalf = this.getSize()._divideBy(2);
+    return this.project(center, zoom)._subtract(viewHalf)._add(this._getMapPanePos());  // no ._round()
+  };
+})();
+
+// Toggle the un-rounded pipeline. On a real on→off transition, fire viewreset so
+// every layer re-rounds to pixel-crisp at the settled view (tiles are cached →
+// no reload). Shared by the dives and the pan.
+function smoothZoom(on){
+  on = !!on;
+  var was = !!window._cineSmoothZoom;
+  window._cineSmoothZoom = on;
+  if(was && !on && map){ map.fire('viewreset'); }
+}
+
+function buildMap(){
+  map = L.map('cine-map', {
+    center:[34,40], zoom:4,
+    zoomControl:false, attributionControl:false,
+    dragging:false, touchZoom:false, doubleClickZoom:false, scrollWheelZoom:false,
+    boxZoom:false, keyboard:false, tap:false, inertia:false,
+    zoomSnap:0.1, minZoom:3, maxZoom:9, fadeAnimation:true, zoomAnimation:true
+  });
+  _tiles = L.tileLayer(TILE_URL, TILE_OPTS).addTo(map);
+}
+
+// 8-pointed parchment star — the same capital symbol the game uses for Athens/Persepolis
+function _starPath(cx, cy, rOuter, rInner){
+  var pts='';
+  for(var i=0;i<16;i++){
+    var ang=(i/16)*Math.PI*2 - Math.PI/2;
+    var pr=(i%2===0)?rOuter:rInner;
+    pts+=(i?' ':'')+(cx+Math.cos(ang)*pr).toFixed(2)+','+(cy+Math.sin(ang)*pr).toFixed(2);
+  }
+  return pts;
+}
+function capitalStarSvg(faction){
+  var mc = (faction==='G') ? '#2a58c8' : '#b83018';   // faction dot
+  var ic = (faction==='G') ? '#d8eeff' : '#ffe8d0';
+  var R=30, rIn=18, r=16, S=72, c=S/2;                 // matches the game's haloR/rInner/r
+  return '<svg width="'+S+'" height="'+S+'" viewBox="0 0 '+S+' '+S+'" class="cm-star-svg">'
+    + '<polygon points="'+_starPath(c,c,R,rIn)+'" fill="#e8d8a8" stroke="#3a2810" stroke-width="1.4" stroke-linejoin="round"/>'
+    + '<polygon points="'+_starPath(c,c,R-1.6,rIn-1)+'" fill="none" stroke="#edd870" stroke-width="0.9" opacity=".9" stroke-linejoin="round"/>'
+    + '<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="'+mc+'" stroke="#3a2810" stroke-width="1.2"/>'
+    + '<circle cx="'+c+'" cy="'+(c-3)+'" r="4.5" fill="'+ic+'" opacity=".85"/>'
+    + '</svg>';
+}
+
+function makeMarker(lat, lon, name, side, labeled, major){
+  // side: 'G' Greek (blue) | 'P' Persian (red) | 'I' Ionian (starts Persian-red, switches later)
+  var faction = (side==='G') ? 'G' : 'P';
+  var isCapital = (name==='Athens' || name==='Persepolis');
+  var icon;
+  if(isCapital){
+    icon = L.divIcon({
+      className: 'cine-marker cm-'+faction+' cm-capital',
+      html:'<div class="cm-cap-star">'+capitalStarSvg(faction)+'</div><div class="cm-label">'+name+'</div>',
+      iconSize:[0,0], iconAnchor:[0,0]
+    });
+  } else {
+    var cls = 'cine-marker cm-'+faction + (major ? ' cm-major' : '') + (labeled ? '' : ' cm-nolabel');
+    icon = L.divIcon({
+      className: cls,
+      html:'<div class="cm-halo"></div><div class="cm-dot"></div>'+(labeled?'<div class="cm-label">'+name+'</div>':''),
+      iconSize:[0,0], iconAnchor:[0,0]
+    });
+  }
+  var m = L.marker([lat,lon], { icon:icon, interactive:false, keyboard:false });
+  m.addTo(map);
+  m.setOpacity(0);
+  return m;
+}
+
+function addMarkers(){
+  ROSTER.forEach(function(c){
+    _markers[c[2]] = makeMarker(c[0], c[1], c[2], c[3], c[4], c[2]==='Miletus');
+  });
+}
+
+function showAllMarkers(on){
+  Object.keys(_markers).forEach(function(n){ _markers[n].setOpacity(on?1:0); });
+}
+
+function flashSwitch(names, faction){
+  names.forEach(function(n){
+    var m=_markers[n]; if(!m) return;
+    var el=m.getElement(); if(!el) return;
+    el.classList.add('cm-flash');
+    el.classList.remove('cm-P','cm-G'); el.classList.add('cm-'+faction);
+    (function(e){ setTimeout(function(){ e.classList.remove('cm-flash'); }, 880); })(el);
+  });
+}
+
+function highlightIonian(on){
+  IONIAN.forEach(function(n){
+    var m=_markers[n]; if(!m) return; var el=m.getElement(); if(!el) return;
+    if(on) el.classList.add('cm-hi'); else el.classList.remove('cm-hi');
+  });
+}
+
+// Chaikin-smooth a closed ring for rounded border edges
+function chaikin(pts, iters){
+  for(var k=0;k<iters;k++){
+    var out=[];
+    for(var i=0;i<pts.length;i++){
+      var a=pts[i], b=pts[(i+1)%pts.length];
+      out.push([a[0]*0.75+b[0]*0.25, a[1]*0.75+b[1]*0.25]);
+      out.push([a[0]*0.25+b[0]*0.75, a[1]*0.25+b[1]*0.75]);
+    }
+    pts=out;
+  }
+  return pts;
+}
+
+// Roads copied from the game: secondary network (subtle amber) + Royal Road (bright gold)
+function drawRoads(){
+  if(_roadLayer) return;
+  // Dedicated renderer with a wider padding so the road draw-window extends well
+  // beyond the viewport — during the smooth pan we advance this window a few
+  // times a second (panPath) so roads ahead of the sweep are revealed in time.
+  _roadRenderer = L.svg({ padding: 0.9 }).addTo(map);
+  _roadLayer = L.layerGroup().addTo(map);
+  ROADS_SECONDARY.forEach(function(pts){
+    L.polyline(pts, {renderer:_roadRenderer, color:'#cda24a', weight:2.2, opacity:.72, dashArray:'5,5', interactive:false}).addTo(_roadLayer);
+  });
+  ROADS_ROYAL.forEach(function(pts){
+    L.polyline(pts, {renderer:_roadRenderer, color:'#edd870', weight:3.6, opacity:.95, dashArray:'11,6', interactive:false}).addTo(_roadLayer);
+  });
+}
+
+// Rounded red Persian-territory border (opening shot only); fades on the dive
+function drawEmpireBorder(){
+  var ring = chaikin(EMPIRE_ANCHORS, 3);
+  _empireBorder = L.polygon(ring, {
+    color:'#e0703a', weight:2.5, opacity:.85,
+    fillColor:'#c8301a', fillOpacity:.18,
+    className:'empire-border', interactive:false, smoothFactor:1
+  }).addTo(map);
+}
+function setEmpireBorder(on){
+  if(_empireBorder && _empireBorder._path){ _empireBorder._path.style.opacity = on ? '' : '0'; }
+}
+function setIonianFaction(f){
+  IONIAN.forEach(function(n){ var m=_markers[n]; if(!m) return; var el=m.getElement(); if(!el) return;
+    el.classList.remove('cm-flash','cm-P','cm-G'); el.classList.add('cm-'+f); });
+}
+
+// Beat-scoped timers — cleared whenever the active beat changes, so a jump (Back / tap-ahead) never misfires a stale callback
+var _beatTimers=[];
+function bt(fn, ms){ var id=setTimeout(fn, ms); _beatTimers.push(id); return id; }
+function clearBeatTimers(){ _beatTimers.forEach(clearTimeout); _beatTimers=[]; }
+
+// Caption crossfade
+function caption(html){
+  var p=document.getElementById('cap-text');
+  p.classList.remove('show');
+  bt(function(){ p.innerHTML=html; p.classList.add('show'); }, 260);
+}
+// Same, but fade the current line out first and wait CINE.pre before the new line appears
+function delayCap(html){
+  var p=document.getElementById('cap-text');
+  p.classList.remove('show');
+  bt(function(){ caption(html); }, CINE.pre);
+}
+
+// Constant-zoom pan through a list of waypoints (Leaflet has no native slow pan).
+// Speed is constant in lat/lon arc-length so the camera doesn't lurch between stops.
+//
+// To stay smooth we DON'T setView per frame (that re-projects every road/marker
+// 60×/s — the judder). Instead each frame we slide the whole map pane by one
+// transform (tiles + roads + markers ride it together, no reproject), and a few
+// times a second we ask the tile layer to load imagery slightly AHEAD of the
+// sweep so the leading edge stays covered. The only setView is the final settle,
+// which lands on the same pixels already shown (un-rounding keeps it seamless).
+var _panCurrent=null;
+function panPath(waypoints, ms, done){
+  cancelPan();
+  var z = map.getZoom();
+  var c = map.getCenter();
+  var pts = [[c.lat, c.lng]].concat(waypoints);
+  var seg=[], total=0;
+  for(var i=1;i<pts.length;i++){
+    var dy=pts[i][0]-pts[i-1][0], dx=pts[i][1]-pts[i-1][1];
+    var d=Math.sqrt(dx*dx+dy*dy); seg.push(d); total+=d;
+  }
+  if(total===0){ if(done) done(); return; }
+
+  var anchor   = L.latLng(c.lat, c.lng);     // fixed reference for the whole sweep
+  var anchorPt = map.project(anchor, z);     // its projected pixel point (zoom z)
+  var start=null, lastLoad=-1e9, lastRoads=-1e9;
+  var LOAD_MS = 160;                          // refresh tiles ~6×/sec
+  var ROAD_MS = 280;                          // advance road window ~3.5×/sec
+  var vh = map.getSize();
+  var LEAD = Math.max(vh.x, vh.y) * 0.4;      // load ~0.4 viewport ahead of the edge
+
+  function latLngAt(t){
+    var target=t*total, acc=0, i=0;
+    while(i<seg.length-1 && acc+seg[i] < target){ acc+=seg[i]; i++; }
+    var f = seg[i]>0 ? (target-acc)/seg[i] : 1; if(f>1) f=1;
+    return L.latLng(pts[i][0]+(pts[i+1][0]-pts[i][0])*f,
+                    pts[i][1]+(pts[i+1][1]-pts[i][1])*f);
+  }
+  function loadAhead(t, ll){
+    if(!_tiles) return;
+    var p  = map.project(ll, z);
+    var pn = map.project(latLngAt(Math.min(1, t+0.01)), z);   // travel direction
+    var dx = pn.x-p.x, dy = pn.y-p.y, dl = Math.sqrt(dx*dx+dy*dy) || 1;
+    var ahead = map.unproject(L.point(p.x + dx/dl*LEAD, p.y + dy/dl*LEAD), z);
+    _tiles._update(ahead);
+  }
+  function step(ts){
+    if(start===null) start=ts;
+    var t = Math.min(1,(ts-start)/ms);
+    var ll = latLngAt(t);
+    _panCurrent = ll;
+    // cheap slide: one transform on the map pane; every layer rides it
+    L.DomUtil.setPosition(map._mapPane, anchorPt.subtract(map.project(ll, z)));
+    if(ts - lastLoad >= LOAD_MS){ lastLoad = ts; loadAhead(t, ll); }
+    // advance the road draw-window so roads ahead of the sweep are revealed
+    // (only repositions the SVG window — does not re-project the roads)
+    if(_roadRenderer && _roadRenderer._update && ts - lastRoads >= ROAD_MS){
+      lastRoads = ts; _roadRenderer._update();
+    }
+    if(t<1){ _panRAF=requestAnimationFrame(step); }
+    else {
+      map.setView(ll, z, {animate:false});   // settle: pane→0, Leaflet recentred
+      _panRAF=null; _panCurrent=null; smoothZoom(false); if(done) done();
+    }
+  }
+  smoothZoom(true);
+  _panRAF=requestAnimationFrame(step);
+}
+function cancelPan(){
+  if(_panRAF){
+    cancelAnimationFrame(_panRAF); _panRAF=null;
+    // interrupted mid-slide: re-centre on the current position so the pane
+    // returns to 0 and Leaflet's view matches what's on screen (seamless).
+    if(_panCurrent && map){ map.setView(_panCurrent, map.getZoom(), {animate:false}); }
+  }
+  _panCurrent=null;
+  smoothZoom(false);
+}
+
+// ══ Beat timeline ══
+var beats, beatIdx=-1, beatTimer=null;
+
+function defineBeats(){
+  var ION_PAD = {animate:false, paddingTopLeft:[20,40], paddingBottomRight:[20,90]};
+  beats = [
+    // 0 — title card
+    { hold: CINE.titleHold, run:function(seek){
+        document.getElementById('cine-title').classList.add('show');
+        document.getElementById('cine-skip').style.display='none';
+        document.getElementById('cine-nav').style.display='none';
+      }},
+    // 1 — line 1: empire establishing
+    { hold: CINE.empireHold + CINE.pre, run:function(seek){
+        document.getElementById('cine-title').classList.remove('show');
+        document.getElementById('cine-skip').style.display='block';
+        document.getElementById('cine-nav').style.display='flex';
+        map.fitBounds(PLAY_BOUNDS, {animate:false, padding:[24,24]});
+        drawRoads();
+        if(!_empireBorder) drawEmpireBorder();
+        setEmpireBorder(true);
+        showAllMarkers(true);
+        setIonianFaction('P'); highlightIonian(false);
+        document.getElementById('empire-label').classList.add('show');
+        delayCap('Ancient Persia was the largest empire Earth had ever known. And for the first time in history, it ruled with tolerance and acceptance of its people.');
+      }},
+    // 2 — line 2: Cyrus / dive to Persepolis
+    { hold: CINE.flyPersepolis + CINE.restPersepolis + CINE.pre, run:function(seek){
+        document.getElementById('empire-label').classList.remove('show');
+        setEmpireBorder(false);
+        setIonianFaction('P'); highlightIonian(false);
+        if(seek) map.fitBounds(PLAY_BOUNDS, {animate:false, padding:[24,24]});  // replay dive from the empire view
+        delayCap('<span class="q">&ldquo;I announce that I will respect the traditions, customs, and religions of the nations of my empire and never let any of my governors look down on or insult them.&rdquo;<span class="qa">— Cyrus the Great, First Persian King</span></span>');
+        smoothZoom(true);
+        map.flyTo(PERSEPOLIS, panZoom, {animate:true, duration:CINE.flyPersepolis/1000, easeLinearity:CINE.flyEase});
+        bt(function(){ smoothZoom(false); }, CINE.flyPersepolis);
+      }},
+    // 3 — line 3: archers / pan toward Athens
+    { hold: CINE.panMs + 600 + CINE.pre, run:function(seek){
+        document.getElementById('empire-label').classList.remove('show');
+        setEmpireBorder(false);
+        setIonianFaction('P'); highlightIonian(false);
+        if(seek) map.setView(PERSEPOLIS, panZoom, {animate:false});  // pan is relative — must start at Persepolis
+        delayCap('The Persian Empire was ruled by armies of cavalry and archers that could black out the sun with their arrows.');
+        panPath(PAN_ROUTE, CINE.panMs);
+      }},
+    // 4 — line 4: Greece / zoom in toward Athens
+    { hold: CINE.zoomAthens + CINE.beatGreece + CINE.pre, run:function(seek){
+        setEmpireBorder(false);
+        setIonianFaction('P'); highlightIonian(false);
+        if(seek) map.setView(ATHENS, panZoom, {animate:false});  // replay the zoom-in from the pan zoom
+        delayCap('Ancient Greece was a loose collection of city states that had existed for thousands of years in conflict with each other. Each defended by a phalanx of armored residents with long spears. Only recently, Athens began a radical experiment with democracy.');
+        smoothZoom(true);
+        map.flyTo(ATHENS, greeceZoom, {animate:true, duration:CINE.zoomAthens/1000, easeLinearity:CINE.flyEase});
+        bt(function(){ smoothZoom(false); }, CINE.zoomAthens);
+      }},
+    // 5 — line 5: seafaring / zoom out to the Ionian coast
+    { hold: CINE.flyIonia + CINE.beatIonia + CINE.pre, run:function(seek){
+        setIonianFaction('P'); highlightIonian(false);
+        if(seek) map.setView(ATHENS, greeceZoom, {animate:false});  // replay the zoom-out from Athens
+        delayCap('Greeks were a seafaring people and had settled throughout the Mediterranean and Black Seas, including along the Ionian Coast under Persian rule.');
+        smoothZoom(true);
+        map.flyToBounds(IONIA_BOUNDS, {animate:true, duration:CINE.flyIonia/1000, easeLinearity:CINE.flyEase, paddingTopLeft:[20,40], paddingBottomRight:[20,90]});
+        bt(function(){ smoothZoom(false); }, CINE.flyIonia);
+        bt(function(){ highlightIonian(true); }, CINE.flyIonia*0.5);
+      }},
+    // 6 — line 6: revolt
+    { hold: CINE.beatRevolt, run:function(seek){
+        setIonianFaction('P'); highlightIonian(true);
+        if(seek) map.fitBounds(IONIA_BOUNDS, ION_PAD);
+        caption('The Ionian Greeks were led to revolt by a Persian-appointed tyrant from Miletus, fueled by self-preservation after a recent military blunder.');
+      }},
+    // 7 — line 7: dramatic switch + final line
+    { hold: CINE.beatSwitch + CINE.beatFinal, run:function(seek){
+        highlightIonian(true);
+        if(seek) map.fitBounds(IONIA_BOUNDS, ION_PAD);
+        flashSwitch(IONIAN, 'G');
+        bt(function(){
+          caption('The Ionians convinced Athens to join the fight, igniting a conflict between Greeks and Persians that would echo through history.');
+        }, CINE.beatSwitch);
+      }}
+  ];
+}
+
+function playBeat(i, seek){
+  if(i>=beats.length){ endCinematic(); return; }
+  if(i<0) i=0;
+  beatIdx=i;
+  if(beatTimer){ clearTimeout(beatTimer); beatTimer=null; }
+  clearBeatTimers();
+  cancelPan();
+  smoothZoom(false);
+  beats[i].run(seek);
+  beatTimer=setTimeout(function(){ playBeat(i+1, false); }, beats[i].hold);
+}
+
+function nextBeat(){
+  if(!beats) return;
+  if(beatIdx>=beats.length-1){ endCinematic(); return; }
+  playBeat(beatIdx+1, true);   // manual jump: relocate the camera for the new line
+}
+
+function backBeat(){
+  if(!beats || beatIdx<=0) return;
+  playBeat(beatIdx-1, true);   // rewind to the start of the previous line, relocating the camera
+}
+
+function endCinematic(){
+  if(beatTimer){ clearTimeout(beatTimer); beatTimer=null; }
+  clearBeatTimers();
+  cancelPan();
+  smoothZoom(false);
+  beatIdx = beats ? beats.length : 99;
+  var fade=['cine-map','cine-vignette','empire-label','cine-caption','cine-title'];
+  fade.forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.transition='opacity .8s ease'; el.style.opacity='0'; } });
+  var sk=document.getElementById('cine-skip'); if(sk) sk.style.display='none';
+  var bk=document.getElementById('cine-nav'); if(bk) bk.style.display='none';
+  setTimeout(function(){
+    fade.forEach(function(id){ var el=document.getElementById(id); if(el) el.style.display='none'; });
+    document.getElementById('sec-begin').classList.add('active');
+  }, 820);
+}
+
+function skipCinematic(e){ if(e){ e.stopPropagation(); } endCinematic(); }
+function backCinematic(e){ if(e){ e.stopPropagation(); } backBeat(); }
+function nextCinematic(e){ if(e){ e.stopPropagation(); } nextBeat(); }   // same advance as a screen tap
+
+// From the Begin screen, step back into the cinematic at its final line
+function backToCinematic(e){
+  if(e){ e.stopPropagation(); }
+  if(!beats) return;
+  document.getElementById('sec-begin').classList.remove('active');
+  if(beatTimer){ clearTimeout(beatTimer); beatTimer=null; }
+  clearBeatTimers();
+  ['cine-map','cine-vignette','cine-caption'].forEach(function(id){
+    var el=document.getElementById(id); if(el){ el.style.display=''; el.style.opacity=''; }
+  });
+  document.getElementById('cine-skip').style.display='block';
+  document.getElementById('cine-nav').style.display='flex';
+  playBeat(beats.length-1, true);   // replay the last line, relocating the camera
+}
+function beginCampaign(){ window.location.href='ancient-map.html'; }
+
+// Tap anywhere (except Skip / Back) to jump ahead; keyboard support
+document.addEventListener('click', function(e){
+  if(!beats || beatIdx>=beats.length) return;
+  if(e.target.closest && (e.target.closest('#cine-skip') || e.target.closest('#cine-nav'))) return;
+  nextBeat();
+});
+document.addEventListener('keydown', function(e){
+  if(!beats || beatIdx>=beats.length){
+    if(e.key==='Enter'||e.key===' '){ beginCampaign(); e.preventDefault(); }
+    return;
+  }
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='Enter'){ nextBeat(); e.preventDefault(); }
+  else if(e.key==='ArrowLeft'){ backBeat(); e.preventDefault(); }
+  else if(e.key==='Escape'){ skipCinematic(); }
+});
+
+// ── Boot ──
+buildMap();
+addMarkers();
+map.whenReady(function(){
+  setTimeout(function(){
+    map.invalidateSize();
+    greeceZoom = map.getBoundsZoom(GREECE_BOUNDS);   // zoom that fits mainland Greece in THIS viewport
+    empireZoom = map.getBoundsZoom(PLAY_BOUNDS);      // zoom of the whole-map establishing shot
+    panZoom    = empireZoom + (greeceZoom - empireZoom) * CINE.panZoomFrac;  // 50% of the way in
+    defineBeats();
+    playBeat(0);
+  }, 140);
+});
+</script>
+</body>
+</html>
