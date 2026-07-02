@@ -442,7 +442,7 @@
     font-family:Georgia,serif;
     font-variant:small-caps;
     font-size:clamp(11px,2.5vw,14px);
-    letter-spacing:3px;
+    letter-spacing:2px;
     padding:8px 12px;
     cursor:pointer;
     text-shadow:0 0 8px rgba(201,168,76,.5);
@@ -534,7 +534,7 @@
     font-family:Georgia,serif;
     font-variant:small-caps;
     font-size:clamp(11px,2.5vw,14px);
-    letter-spacing:3px;
+    letter-spacing:2px;
     padding:8px 12px;
     cursor:pointer;
     text-shadow:0 0 8px rgba(201,168,76,.5);
@@ -566,7 +566,7 @@
     font-family:Georgia,serif;
     font-variant:small-caps;
     font-size:clamp(11px,2.5vw,14px);
-    letter-spacing:3px;
+    letter-spacing:2px;
     padding:8px 12px;
     cursor:pointer;
     text-shadow:0 0 8px rgba(201,168,76,.5);
@@ -684,7 +684,7 @@
     display:flex; flex-direction:column; gap:8px; align-items:flex-start;
     pointer-events:none;
   }
-  #cmd-dock .cmd-row { display:flex; flex-direction:row; gap:10px; align-items:flex-end; }
+  #cmd-dock .cmd-row { display:flex; flex-direction:row; gap:6px; align-items:flex-end; }
   /* Bottom row sits next to the blue bar's % label — indent it so the label shows. */
   #cmd-row-orders { margin-left:22px; }
   #cmd-dock .cmd-row > * { pointer-events:auto; }
@@ -745,26 +745,32 @@
     background:#e0c060; transition:height .25s linear, background-color .25s;
   }
   .stam-icon { font-size:11px; line-height:1; filter:drop-shadow(0 1px 1px rgba(0,0,0,.8)); }
+  /* Slot badges as circular medallions sitting on top of each END of the
+     aggression bar. The row overlaps the slider below it (negative margin),
+     shaving the section's height; pointer-events pass through so dragging
+     the slider under the medallions still works. */
   #aggression-slot-row {
     display:flex; justify-content:space-between; align-items:center;
-    width:100%; gap:8px;
+    width:100%;
+    position:relative; z-index:3;
+    margin-bottom:-17px;
+    pointer-events:none;
   }
   #aggression-slot-row span {
-    flex:1; min-width:0;
+    flex:0 0 auto; width:26px; height:26px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 35% 30%, rgba(62,46,16,.96), rgba(12,8,2,.96));
+    border:1px solid rgba(201,168,76,.65);
+    box-shadow:0 1px 4px rgba(0,0,0,.65);
     font-family:'Cinzel',serif; font-size:11px; font-weight:bold;
-    text-transform:uppercase; letter-spacing:.5px;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    /* Heavy text-shadow makes labels readable over any battlefield colour. */
-    text-shadow:
-      0 0 3px rgba(0,0,0,1), 0 0 3px rgba(0,0,0,1),
-      0 1px 2px rgba(0,0,0,1), 0 -1px 2px rgba(0,0,0,1);
+    line-height:0;
     transition:opacity .15s ease;
   }
-  /* Slot 1 left-aligned and cool-tinted; Slot 2 right-aligned and warm-tinted.
-     Matches the slider's left=cool / right=warm gradient so the player can
-     intuit which slot is dominant at the current slider position. */
-  #span-hold  { text-align:left;  color:#9ed1ff; line-height:0; }
-  #span-press { text-align:right; color:#ffa666; line-height:0; }
+  /* Slot 1 cool-tinted; Slot 2 warm-tinted — matches the slider's left=cool /
+     right=warm gradient so the player can intuit slot dominance. (Tint shows
+     on the em-dash empty state; filled slots show their SVG badge.) */
+  #span-hold  { color:#9ed1ff; }
+  #span-press { color:#ffa666; }
   /* ── Slider styling (global default) ──────────────────────────────────────
      Gilded-boss handle on a bronze groove for every range input, so any slider
      added later inherits it automatically. The aggression & order sliders are
@@ -844,7 +850,7 @@
     border-color:#5a4030; box-shadow:none;
   }
   #shout-btn-text   { display:flex; flex-direction:column; align-items:flex-start; gap:1px; flex:1 1 auto; min-width:0; }
-  #shout-btn-name   { font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; text-align:left; white-space:nowrap; }
+  #shout-btn-name   { display:none; }  /* name hidden to keep the button narrow; full name remains in the tooltip */
   #shout-btn-effect { font-size:8.5px; letter-spacing:.3px; color:#d8b888; line-height:1.2; text-align:left; }
   #shout-btn-cd     { font-size:10px; font-weight:700; color:#ffcf7a; flex:0 0 auto; }
   #shout-btn-icon   { line-height:0; flex:0 0 auto; }
