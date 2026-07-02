@@ -67,7 +67,7 @@
     text-transform:uppercase; font-family:'Cinzel',serif; white-space:nowrap;
     transition:border-color .12s,color .12s,box-shadow .12s;
   }
-  .class-label .cl-total { font-size:9px; color:#7a6a40; background:rgba(255,255,255,.05); padding:1px 6px; border-radius:4px; }
+  .class-label .cl-total { font-size:11px; font-weight:700; color:#ffe9b0; background:rgba(255,255,255,.08); padding:1px 6px; border-radius:4px; }
   .class-label:hover { color:#ddc77a; border-color:#6a4a1a; }
   .class-label.active.melee   { border-color:#6f93ff; color:#a9c2ff; box-shadow:0 0 14px rgba(111,147,255,.3); }
   .class-label.active.archer  { border-color:#6fcf6f; color:#b6f0b6; box-shadow:0 0 14px rgba(111,207,111,.3); }
@@ -86,7 +86,7 @@
   .sub-btn .s-icon { font-size:17px; line-height:1; }
   .sub-btn .s-icon svg { display:block; }
   .sub-btn .s-name { font-size:8px; line-height:1.03; letter-spacing:.1px; text-align:center; max-height:2.1em; overflow:hidden; }
-  .sub-btn .s-cnt  { font-size:8px; color:#cdbd8a; }
+  .sub-btn .s-cnt  { font-size:9.5px; font-weight:700; color:#ffedb8; }
   .sub-btn .s-swatch { position:absolute; top:3px; right:3px; width:7px; height:7px; border-radius:50%; border:1px solid rgba(0,0,0,.6); }
   .sub-btn .s-merc { position:absolute; top:1px; left:3px; font-size:8px; color:#e8a020; }
   .sub-btn.active { border-color:#c9a84c; color:#ffdd88; background:linear-gradient(135deg,#2a1e04,#120c02); box-shadow:0 0 13px rgba(201,168,76,.4); }
@@ -640,6 +640,36 @@
     pointer-events:none;
     animation:swirl-rotate 1.8s linear infinite, spark-rotate 0.9s linear infinite reverse;
   }
+  /* ── Draw-phase call-to-action swirl ──────────────────────────────────────
+     Same electric-current ring, applied to troop selector buttons that still
+     have undeployed troops (.swirl-cta, toggled from renderSelector /
+     updateVariantCounts). Ring sits fully INSIDE the border (inset:0) because
+     .sub-btn clips overflow. Per-class hue via color on the pseudo-element. */
+  .class-label.swirl-cta, .sub-btn.swirl-cta { position:relative; }
+  .class-label.swirl-cta::before, .sub-btn.swirl-cta::before {
+    content:'';
+    position:absolute; inset:0; border-radius:5px; padding:3px;
+    background:
+      /* soft comet: brief white core, long gentle colored tail (no sparks —
+         calmer than the order buttons since many draw buttons glow at once) */
+      conic-gradient(from var(--swirl-ang),
+        #ffffff 0deg, currentColor 10deg, rgba(0,0,0,0) 170deg, transparent 360deg);
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    filter:drop-shadow(0 0 4px currentColor);
+    pointer-events:none;
+    animation:swirl-rotate 4s linear infinite;
+  }
+  .class-label.melee.swirl-cta::before,   .sub-btn.melee.swirl-cta::before   { color:#88aaff; }
+  .class-label.archer.swirl-cta::before,  .sub-btn.archer.swirl-cta::before  { color:#77dd77; }
+  .class-label.cavalry.swirl-cta::before, .sub-btn.cavalry.swirl-cta::before { color:#ffdd66; }
+  .class-label.general.swirl-cta::before                                     { color:#ffee88; }
   #stance-corner {
     position:absolute; top:8px; left:30px; display:none;
     flex-direction:column; gap:6px; min-width:200px; z-index:10;
@@ -669,8 +699,9 @@
     box-shadow:0 2px 10px rgba(0,0,0,.55);
   }
   /* Surrender — top-right of the battle screen */
+  #order-btn-row { display:flex; gap:8px; align-items:stretch; justify-content:center; }
   #battle-surrender {
-    position:absolute; top:10px; right:30px; z-index:999; display:none;
+    position:relative; display:none;
     background:linear-gradient(135deg,#553300,#2a1500);
     border:2px solid #cc7722; border-radius:6px;
     color:#ffcc88; font-family:Georgia,serif; font-variant:small-caps;
@@ -689,6 +720,32 @@
     text-transform:uppercase; text-align:center; color:#e8c96b;
     text-shadow:0 1px 2px rgba(0,0,0,.85);
   }
+  /* ── Army-wide stamina bars (inside stance-corner) ── */
+  #stamina-bars {
+    display:none; flex-direction:column; align-items:center; gap:3px;
+    position:absolute; top:10px; right:30px; z-index:998;
+    background:linear-gradient(160deg,rgba(20,14,4,.78),rgba(10,7,2,.78));
+    border:1px solid rgba(201,168,76,.55); border-radius:6px;
+    padding:6px 10px 7px;
+    box-shadow:0 2px 10px rgba(0,0,0,.55);
+  }
+  #stamina-label {
+    font-family:'Cinzel',serif; font-size:10px; letter-spacing:2px;
+    text-transform:uppercase; text-align:center; color:#e8c96b;
+    text-shadow:0 1px 2px rgba(0,0,0,.85);
+  }
+  #stamina-bar-row { display:flex; gap:16px; align-items:flex-end; }
+  .stam-col { display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .stam-bar {
+    width:10px; height:42px; position:relative; overflow:hidden;
+    border:1px solid rgba(201,168,76,.55); border-radius:3px;
+    background:rgba(0,0,0,.45);
+  }
+  .stam-fill {
+    position:absolute; left:0; right:0; bottom:0; height:100%;
+    background:#e0c060; transition:height .25s linear, background-color .25s;
+  }
+  .stam-icon { font-size:11px; line-height:1; filter:drop-shadow(0 1px 1px rgba(0,0,0,.8)); }
   #aggression-slot-row {
     display:flex; justify-content:space-between; align-items:center;
     width:100%; gap:8px;
@@ -878,6 +935,7 @@ body.preview-mode #stance-corner,
 body.preview-mode #cmd-dock,
 body.preview-mode #command-orders,
 body.preview-mode #battle-surrender,
+body.preview-mode #stamina-bars,
 body.preview-mode #battle-title,
 body.preview-mode #battle-status,
 body.preview-mode #btn-move-order,
@@ -937,7 +995,10 @@ body.preview-mode, body.preview-mode html { background:#000 !important; }
             <span data-order="3">Charge</span>
           </div>
         </div>
-        <button id="btn-skirmish" onclick="toggleSkirmishOrder()">Skirmish</button>
+        <div id="order-btn-row">
+          <button id="btn-skirmish" onclick="toggleSkirmishOrder()">Skirmish</button>
+          <button id="battle-surrender" onclick="surrender()">Retreat</button>
+        </div>
       </div>
     </div>
   </div>
@@ -995,8 +1056,25 @@ body.preview-mode, body.preview-mode html { background:#000 !important; }
     <button class="btn" id="btn-results-ok" onclick="dismissResults()">Ok</button>
   </div>
 
-  <!-- Surrender — top-right of the battle screen -->
-  <button id="battle-surrender" onclick="surrender()">Retreat</button>
+  <!-- Total Stamina — top-right (former Retreat button spot); shown/hidden with
+       the battle HUD alongside stance-corner. -->
+  <div id="stamina-bars">
+    <div id="stamina-label">Total Stamina</div>
+    <div id="stamina-bar-row">
+      <div class="stam-col" id="stam-col-melee">
+        <div class="stam-bar"><div class="stam-fill" id="stam-fill-melee"></div></div>
+        <span class="stam-icon" title="Melee">&#9876;</span>
+      </div>
+      <div class="stam-col" id="stam-col-archer">
+        <div class="stam-bar"><div class="stam-fill" id="stam-fill-archer"></div></div>
+        <span class="stam-icon" title="Ranged">&#127993;</span>
+      </div>
+      <div class="stam-col" id="stam-col-cavalry">
+        <div class="stam-bar"><div class="stam-fill" id="stam-fill-cavalry"></div></div>
+        <span class="stam-icon" title="Cavalry">&#128014;</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Surrender Confirmation Popup ──────────────────────────────────────── -->
@@ -2474,6 +2552,172 @@ function statusArmorDelta(s) {
   }
   return d;
 }
+
+// Stance → armor modifier (shield wall). A formed-up melee line raises shields
+// when stationary/engaged and lowers them for mobility; the delta feeds into
+// effectiveArmor in applyDamage. Shield-wall tiers are melee-only (infantry
+// mechanic); the exhausted penalty applies to every kind. Sprint takes effect
+// once s._sprinting exists (later phase).
+const AR_HOLD = 0.15, AR_ENGAGED = 0.10, AR_MARCH = 0.05, AR_CHARGE = -0.05,
+      AR_SPRINT = -0.20, AR_EXHAUSTED = -0.10;
+function stanceArmorDelta(s) {
+  if (!s) return 0;
+  let d = 0;
+  if (s.kind === 'melee') {
+    if (s._sprinting)     d = AR_SPRINT;
+    else if (s.isEngaged) d = AR_ENGAGED;
+    else {
+      const ord = effectiveOrder(s);
+      d = (ord === 'charge') ? AR_CHARGE :
+          (ord === 'march' || ord === 'fallback') ? AR_MARCH :
+          AR_HOLD;                     // hold / stationary shield wall
+    }
+  } else if (s._sprinting) {
+    d = AR_SPRINT;                     // sprinting ranged/cavalry are exposed too
+  }
+  if (s._exhausted) d += AR_EXHAUSTED; // applies to every kind
+  return d;
+}
+
+// ── Stamina / exhaustion ───────────────────────────────────────────────────
+// Units drain stamina while charging, sprinting (later phase), or fighting, and
+// regenerate while marching/holding. At 0 they become exhausted: capped to march
+// pace (in moveUnit), −0.10 armor (stanceArmorDelta), and ×0.7 outgoing damage
+// (applyDamage). They recover once stamina climbs back to STAMINA_RECOVER
+// (hysteresis so they don't flicker). Rates are per second.
+const STAMINA_MAX = 100, STAMINA_RECOVER = 30;
+const STAMINA_DRAIN_SPRINT = 10, STAMINA_DRAIN_CHARGE = 4, STAMINA_DRAIN_ENGAGED = 2, STAMINA_REGEN = 10;
+const EXHAUST_ATTACK_MULT = 0.7;
+// Sprint: short bursts of speed (×SPRINT_MULT) traded for the −0.20 armor tier
+// and fast stamina drain. Needs > SPRINT_START_STAMINA to BEGIN; once running it
+// continues until stamina hits 0 (→ exhausted). Never used for open-ground
+// traversal — only near-contact triggers set it.
+const SPRINT_MULT = 1.4, SPRINT_START_STAMINA = 20;
+const SPRINT_CHARGE_HOME_DIST = 90; // px from contact where a charging melee sprints the last gap
+function _canSprintNow(s) {
+  if (!s || s._exhausted || s.kind === 'general') return false;
+  return !!s._sprintPrev || s.stamina > SPRINT_START_STAMINA;  // start needs >20; continue until 0
+}
+// Light melee (fast infantry) and foot archers tire at half rate.
+function staminaDrainMult(s) {
+  if (s.kind === 'archer') return 0.5;
+  if (s.kind === 'melee' && baseSpeedFor(s) >= 70) return 0.5;
+  return 1.0;
+}
+// Draws a red contour around every FATIGUED formation (both teams), hugging the
+// visible men: depth along local +X (front edge fixed — infantry lose rear
+// columns), width along local Y. Cavalry is the base-anchored triangle. The
+// outline fades in below FATIGUE_SHOW_AT stamina and ramps alpha + color to full
+// intensity at exhaustion; stroke thickens INWARD so the outer edge stays tight
+// on the formation. One shared graphics layer; cost scales with fatigued count.
+const FATIGUE_SHOW_AT = 50;      // stamina below which the outline starts fading in
+const FATIGUE_LINE_W  = 1.4;     // stroke thickness (grows inward)
+function _drawFatigueOutlines() {
+  if (typeof gameScene === 'undefined' || !gameScene) return;
+  if (!exhaustOutlineGraphics || !exhaustOutlineGraphics.active) {
+    exhaustOutlineGraphics = gameScene.add.graphics();
+    exhaustOutlineGraphics.setDepth(996);
+  }
+  const g = exhaustOutlineGraphics;
+  g.clear();
+  const PAD = 2.5, INSET = FATIGUE_LINE_W / 2;
+  for (const s of soldiers) {
+    if (!s.alive || s.kind === 'general' || !s.container?.active) continue;
+    const st = (s.stamina != null) ? s.stamina : STAMINA_MAX;
+    if (!s._exhausted && st >= FATIGUE_SHOW_AT) continue;
+    // Fatigue intensity: 0 at the show threshold → 1 at zero stamina/exhausted.
+    const t = s._exhausted ? 1 : Math.min(1, Math.max(0, 1 - st / FATIGUE_SHOW_AT));
+    const alpha = 0.25 + 0.65 * t;
+    // Light red → strong red as fatigue deepens (green/blue channels fall).
+    const gb = Math.round(0x88 * (1 - t) + 0x33 * t);
+    const color = (0xff << 16) | (gb << 8) | gb;
+    const maxHp = (s.maxHp != null) ? s.maxHp
+      : (s.kind==='melee' ? MELEE_HP : s.kind==='cavalry' ? CAVALRY_HP : ARCHER_HP);
+    const pct = Math.max(0, Math.min(1, s.hp / maxHp));
+    const rad = Phaser.Math.DegToRad(s.container.angle);
+    g.lineStyle(FATIGUE_LINE_W, color, alpha);
+    g.save();
+    g.translateCanvas(s.container.x, s.container.y);
+    g.rotateCanvas(rad);
+    if (s.kind === 'cavalry') {
+      // Triangle base (-X, widest row) is anchored and stays full width; the
+      // tip recedes as rows are lost. Vertices pulled inward by INSET so the
+      // thicker stroke's outer edge lands on the formation boundary.
+      const vr = Math.max(1, Math.round(pct * CAV_ROWS));
+      const full = cavTriFull(0);
+      const baseX = full.backX - PAD + INSET;
+      const tipX  = full.backX + (vr - 1) * FORM_SPACY + PAD - INSET;
+      const halfY = (KIND_DIMS.cavalry.h - 16) / 2 + PAD - INSET;
+      g.strokeTriangle(tipX, 0, baseX, -halfY, baseX, halfY);
+    } else {
+      // Infantry: front edge (+X) fixed; rear recedes with lost depth columns.
+      const kd = KIND_DIMS[s.kind] || KIND_DIMS.melee;
+      const bCols = (s.kind === 'archer') ? 10 : 6;            // base depth columns
+      const depthFull = kd.h - 16;                              // body-only depth extent
+      const vc = Math.max(1, Math.round(pct * bCols));
+      const visDepth = (vc - 1) * (depthFull / (bCols - 1));
+      const frontX = depthFull / 2 + PAD;
+      const halfW  = (kd.w - 16) / 2 + PAD;                     // lateral (Y), constant
+      g.strokeRect(frontX - visDepth - 2 * PAD + INSET, -halfW + INSET,
+                   visDepth + 2 * PAD - 2 * INSET, (halfW - INSET) * 2);
+    }
+    g.restore();
+  }
+}
+// Army-wide stamina bars (stance-corner): average stamina of the PLAYER's
+// alive troops per class, bars fill bottom-up. A class the army doesn't field
+// hides its column. Self-throttled to ~4 Hz; called from the battle loop.
+let _lastStamBarsT = 0;
+function updateStaminaBars() {
+  const now = Date.now();
+  if (now - _lastStamBarsT < 250) return;
+  _lastStamBarsT = now;
+  if (!document.getElementById('stamina-bar-row')) return;
+  const sum = { melee: 0, archer: 0, cavalry: 0 };
+  const n   = { melee: 0, archer: 0, cavalry: 0 };
+  for (const s of soldiers) {
+    if (!s.alive || s.team !== 'A') continue;
+    if (sum[s.kind] === undefined) continue;   // skips general
+    sum[s.kind] += (s.stamina != null ? s.stamina : STAMINA_MAX);
+    n[s.kind]++;
+  }
+  ['melee', 'archer', 'cavalry'].forEach(function(k){
+    const col  = document.getElementById('stam-col-' + k);
+    const fill = document.getElementById('stam-fill-' + k);
+    if (!col || !fill) return;
+    if (n[k] === 0) { col.style.display = 'none'; return; }
+    col.style.display = 'flex';
+    const pct = Math.max(0, Math.min(100, (sum[k] / n[k]) / STAMINA_MAX * 100));
+    fill.style.height = pct + '%';
+    // Amber when fresh; red as the class nears exhaustion (mirrors the
+    // red fatigue-outline convention on the field).
+    fill.style.background = pct < 30 ? '#e05545' : pct < 55 ? '#e0a040' : '#e0c060';
+  });
+}
+
+function _updateStamina(s, dt) {
+  if (!s || s.kind === 'general' || !s.alive) return;
+  if (s.stamina == null) s.stamina = STAMINA_MAX;
+  let rate;
+  if (s._sprinting) {                                   // dormant until sprint phase
+    rate = -STAMINA_DRAIN_SPRINT * staminaDrainMult(s);
+  } else if (s.isEngaged) {
+    rate = -STAMINA_DRAIN_ENGAGED * staminaDrainMult(s);
+  } else if (!s._exhausted && effectiveOrder(s) === 'charge') {
+    // Genuinely charging (an exhausted unit is capped to march pace, so it
+    // rests instead — otherwise it could never recover mid-charge-order).
+    rate = -STAMINA_DRAIN_CHARGE * staminaDrainMult(s);
+  } else {
+    rate = STAMINA_REGEN;
+  }
+  s.stamina = Math.max(0, Math.min(STAMINA_MAX, s.stamina + rate * dt));
+  if (!s._exhausted && s.stamina <= 0) s._exhausted = true;
+  else if (s._exhausted && s.stamina >= STAMINA_RECOVER) s._exhausted = false;
+  // Remember this frame's sprint state (for _canSprintNow continuation), then
+  // clear it — the unit's kind update re-sets it via a near-contact trigger.
+  s._sprintPrev = s._sprinting;
+  s._sprinting = false;
+}
 // Product of move-speed multipliers from all active status fx.
 function statusMoveMult(s) {
   if (!s || !s._statusFx) return 1;
@@ -2555,6 +2799,7 @@ const FACTION_DOCTRINE = {
       chargeEnemyStrengthMax:  0.85,
       chargeOwnStrengthMin:    0.50,
       fallbackOwnStrengthMax:  0.50,
+      meleeChargeUnderFireSec: 3,        // after the ranged retreat, exposed melee charges ≤3s after player arrows hit it
       tacticalTickFrames:      30
     },
     flanking: {
@@ -2744,6 +2989,7 @@ let _gridCELL = 120;     // must match CELL inside update()
 let followingGeneral = false;
 let aggrFillGraphics = null;
 let aggrOutlineGraphics = null;
+let exhaustOutlineGraphics = null;
 let collisionBoxGraphics = null;
 let _debugGraphics = null;
 let _debugEnabled = false;
@@ -2869,6 +3115,11 @@ let enemyOrder  = 'hold';
 // _aiResetState at battle start.
 let skirmishOrderA = false;
 let skirmishB      = true;
+// Opening-skirmish cohesion: horse archers advance at foot-archer pace (if their
+// side has foot ranged) until that side looses its first volley, then move at
+// full speed. Computed/reset at battle start; _teamRangedFired set in fireArrow.
+let _teamHasFootRanged = { A: false, B: false };
+let _teamRangedFired   = { A: false, B: false };
 // Last scaledTime at which a team-B skirmisher took projectile fire — used by
 // the AI to detect a losing ranged duel. Reset each battle in _aiResetState.
 let _bSkirmLastHit = -99999;
@@ -3354,9 +3605,21 @@ function update(time, delta) {
     const hitCandidates = gridQuery(a.x, a.y, 30);
     const hit = hitCandidates.find(s=>s.alive&&s.container?.active&&s.team!==a.team&&Math.hypot(s.container.x-a.x,s.container.y-a.y)<14);
     if (hit) {
+      // Record the skirmisher firing on a melee unit so it can drive them off
+      // (both teams). a.shooter is the ranged attacker.
+      if (hit.kind === 'melee' && a.shooter) {
+        hit._lastRangedAttacker = a.shooter;
+        hit._lastRangedHitTime  = scaledTime;
+      }
       if (hit.team === 'B') {
         _bLastArrowHit = scaledTime;
         if (_skirmishEligible(hit)) _bSkirmLastHit = scaledTime;
+        // Once the AI's ranged have been forced back (outnumbered), note the
+        // first player arrow to strike the MELEE line — the exposed melee then
+        // charges rather than soaking fire (see tickEnemyAI meleeChargeUnderFire).
+        if (hit.kind === 'melee' && _aiState.rangedReformBehind && _aiState.meleeFireStart < 0) {
+          _aiState.meleeFireStart = scaledTime;
+        }
       }
       applyDamage(hit,a.damage,a.team,a.shooter); spawnHit(a.x,a.y,true);
       if (a.sprite?.active) a.sprite.destroy();
@@ -3479,6 +3742,7 @@ function update(time, delta) {
   if (_frameCount % 3 === 0) assignMeleeTargets();
 
   for (const s of alive) {
+    _updateStamina(s, dt);
     const enemies = s.team==='A'?teamB:teamA;
     const allies  = s.team==='A'?teamA:teamB;
     let nearest=null, nearDist=Infinity;
@@ -3520,6 +3784,9 @@ function update(time, delta) {
     applyDamage(h.target, h.dmg, h.team, h.attacker);
     spawnHit(h.x, h.y, false);
   }
+
+  _drawFatigueOutlines();
+  updateStaminaBars();
 
   // Engagement diagnostic (A): sample current engaged counts per side and
   // per kind (melee, cavalry). Single pass over alive units.
@@ -3723,14 +3990,25 @@ function update(time, delta) {
   updateDebugOverlay();
 }
 
+// Per-unit base movement speed: the subtype speed carried over from the campaign
+// map (UNIT_STATS.speed, merc-scaled) when the unit has one, else the class
+// default. All movement paths route through this so the map's per-troop speeds
+// (light melee/archers 72, heavy melee 60, cavalry 80–90) actually drive battle
+// movement instead of the flat class constants.
+function baseSpeedFor(s) {
+  if (s && s.unitSpeed != null) return s.unitSpeed;
+  const k = s ? s.kind : 'melee';
+  return k === 'cavalry' ? CAVALRY_SPEED :
+         k === 'archer'  ? ARCHER_SPEED  :
+         k === 'general' ? GENERAL_SPEED :
+                           MELEE_SPEED;
+}
+
 // Returns the speed for a Fallback-mode retreat. Same scale as the unit's
 // own forward speed — so a fighting retreat looks like a controlled withdrawal,
 // not a panicked rout. (Rout uses different code paths.)
 function fallbackSpeed(s) {
-  return s.kind === 'cavalry' ? CAVALRY_SPEED :
-         s.kind === 'archer'  ? ARCHER_SPEED  :
-         s.kind === 'general' ? GENERAL_SPEED :
-                                MELEE_SPEED;
+  return baseSpeedFor(s);
 }
 
 // True for unit kinds that can skirmish: archers and ranged-armed cavalry
@@ -3738,6 +4016,17 @@ function fallbackSpeed(s) {
 // never qualify here — they hold the line.
 function _skirmishEligible(s) {
   return s.kind === 'archer' || (s.kind === 'cavalry' && (s.hasBow || s.hasJavelin) && !s.firesInMelee);
+}
+
+// The enemy skirmisher currently firing on this melee unit (if any) — the one
+// that hit it within DRIVE_OFF_WINDOW_MS and is still alive. Used so a melee unit
+// with no melee opponent can press the skirmisher shooting it rather than plant.
+const DRIVE_OFF_WINDOW_MS = 2500;
+function _firingSkirmisherFor(s) {
+  const a = s._lastRangedAttacker;
+  if (!a || !a.alive || !a.container?.active || a.team === s.team) return null;
+  if ((scaledTime - (s._lastRangedHitTime ?? -Infinity)) > DRIVE_OFF_WINDOW_MS) return null;
+  return a;
 }
 
 // Whether this unit should run skirmish behavior this frame. Eligible ranged
@@ -3781,23 +4070,36 @@ function _sameMoveGroup(a, b) {
 
 // Skirmish MOVEMENT POLICY. Advance toward the nearest enemy until inside
 // firing range; hold inside the firing band; retreat toward the unit's own
-// spawn edge (its lines) when an enemy closes within 50% of range. Always
-// faces the enemy so firing (handled by the caller's existing fire code)
-// points the right way even mid-retreat. The caller handles the actual
-// volley; this only drives position + facing.
+// spawn edge (its lines) when an enemy closes within 50% of range. Firing is
+// facing-independent (arrows aim at the target regardless of body angle), so
+// during a duel-loss fallback the unit faces the way it's RUNNING and still
+// fires backward at the enemy. The caller handles the actual volley; this only
+// drives position + facing.
 //   forceRetreat — when true, fall back to own lines regardless of enemy
 //   distance (used by the AI when it's losing an outnumbered ranged duel).
 function _applySkirmishMovement(s, nearest, nearDist, shootRange, speed, allies, dt, forceRetreat) {
-  faceTarget(s, nearest.container.x, nearest.container.y, dt);
   const half = shootRange * 0.5;
-  if (forceRetreat || nearDist < half) {
-    // Enemy too close (or ordered home) — fall back to own lines, still firing.
+  if (forceRetreat) {
+    // AI is losing an outnumbered ranged duel: pull back only to just BEHIND
+    // its own melee line (higher x for team B) so it keeps firing on the
+    // approaching enemy, rather than fleeing all the way to spawn. Moves at the
+    // unit's own (map) speed and faces the run direction while firing backward.
+    const lineX = _aiState.bMeleeLineX;
+    const tx = (lineX != null) ? (lineX + AI_SKIRM_RETREAT_BEHIND) : fallbackTargetX(s.team);
+    faceTarget(s, tx, s.container.y, dt);
+    moveUnit(s, tx, s.container.y, speed, allies, dt);
+  } else if (nearDist < half) {
+    // Enemy too close — fall back to own lines, still firing.
+    faceTarget(s, nearest.container.x, nearest.container.y, dt);
     moveUnit(s, fallbackTargetX(s.team), s.container.y, speed, allies, dt);
   } else if (nearDist > shootRange) {
     // Out of range — close the distance to get into firing range.
+    faceTarget(s, nearest.container.x, nearest.container.y, dt);
     moveUnit(s, nearest.container.x, nearest.container.y, speed, allies, dt);
+  } else {
+    // Between half and full range: stand and shoot (no movement).
+    faceTarget(s, nearest.container.x, nearest.container.y, dt);
   }
-  // Between half and full range: stand and shoot (no movement).
 }
 
 // True when the AI has ordered its skirmishers to fall back to the line.
@@ -3838,6 +4140,7 @@ function _applyOrderMovement(s, allies, dt) {
     // toward (0, 0) which would clump them at the corner).
     const tx = fallbackTargetX(s.team);
     const ty = s.container.y;
+    if (_canSprintNow(s)) s._sprinting = true;   // sprint the withdrawal (stamina-gated)
     moveUnit(s, tx, ty, fallbackSpeed(s), allies, dt);
     return true;
   }
@@ -3850,6 +4153,13 @@ function moveUnit(s, tx, ty, speed, allies, dt) {
   speed *= getSpeedTechMult(s.team, s.kind);
   // Frenzy ability — affected units move faster while in own general's bar.
   speed *= frenzyMoveMult(s);
+  // Sprint burst, or exhausted crawl (mutually exclusive — can't sprint exhausted).
+  if (s._sprinting) {
+    speed *= SPRINT_MULT;
+  } else if (s._exhausted) {
+    const cap = Math.min(baseSpeedFor(s), (s.team === 'A' ? _marchSpeedA : _marchSpeedB) * 0.6);
+    if (speed > cap) speed = cap;
+  }
   const sx=s.container.x, sy=s.container.y;
   const dx=tx-sx, dy=ty-sy, d=Math.hypot(dx,dy);
   if (d<3) return;
@@ -4550,7 +4860,7 @@ function updateMelee(s,nearest,nearDist,allies,dt,time,_hits) {
       // normal flow handle the swing. Don't move this frame.
     } else {
       faceTarget(s, _mt_melee.x, _mt_melee.y, dt);
-      moveUnit(s, _mt_melee.x, _mt_melee.y, MELEE_SPEED, allies, dt);
+      moveUnit(s, _mt_melee.x, _mt_melee.y, baseSpeedFor(s), allies, dt);
       return;
     }
   }
@@ -4589,7 +4899,7 @@ function updateMelee(s,nearest,nearDist,allies,dt,time,_hits) {
       }
     } else {
       faceTarget(s, ft.x, ft.y, dt);
-      moveUnit(s, ft.x, ft.y, MELEE_SPEED, allies, dt);
+      moveUnit(s, ft.x, ft.y, baseSpeedFor(s), allies, dt);
     }
     return;
   }
@@ -4674,11 +4984,29 @@ function updateMelee(s,nearest,nearDist,allies,dt,time,_hits) {
   // Use the army-assigned target; fall back to overhang/nearest logic if null
   const assignedTarget = s._meleePairTarget;
 
+  // Drive off skirmishers: if this unit has no melee opponent to pair with but a
+  // live enemy skirmisher is actively firing on it, press that skirmisher (it
+  // will flee, but the line drives it back). Only under an advancing order —
+  // under Hold/Fallback the unit stays in the shield wall. Sprint (later phase)
+  // will let it actually catch them; for now it closes at its own pace.
+  if (!assignedTarget) {
+    const sk = _firingSkirmisherFor(s);
+    if (sk) {
+      const adv = advanceSpeedFor(s);
+      if (adv > 0) {
+        if (_canSprintNow(s)) s._sprinting = true;   // sprint to actually run the skirmisher down
+        faceTarget(s, sk.container.x, sk.container.y, dt);
+        moveUnit(s, sk.container.x, sk.container.y, adv, allies, dt);
+        return;
+      }
+    }
+  }
+
   if (!assignedTarget && nEnemy === 0) {
     // No chain data or no enemies — just advance on nearest
     faceTarget(s, nearest.container.x, nearest.container.y, dt);
     const _adv = advanceSpeedFor(s);
-    moveUnit(s, nearest.container.x, nearest.container.y, _adv > 0 ? _adv : MELEE_SPEED, allies, dt);
+    moveUnit(s, nearest.container.x, nearest.container.y, _adv > 0 ? _adv : baseSpeedFor(s), allies, dt);
     return;
   }
 
@@ -4691,7 +5019,7 @@ function updateMelee(s,nearest,nearDist,allies,dt,time,_hits) {
     if (!enemyEnd) {
       faceTarget(s, nearest.container.x, nearest.container.y, dt);
       const _adv = advanceSpeedFor(s);
-      moveUnit(s, nearest.container.x, nearest.container.y, _adv > 0 ? _adv : MELEE_SPEED, allies, dt);
+      moveUnit(s, nearest.container.x, nearest.container.y, _adv > 0 ? _adv : baseSpeedFor(s), allies, dt);
       return;
     }
     moveTarget = enemyEnd;
@@ -4742,7 +5070,14 @@ function updateMelee(s,nearest,nearDist,allies,dt,time,_hits) {
       // full MELEE_SPEED. (Hold/Fallback are handled earlier and won't reach
       // this branch.)
       const _adv = advanceSpeedFor(s);
-      const step = Math.min((_adv > 0 ? _adv : MELEE_SPEED) * dt, dd - stopDist);
+      let spd = (_adv > 0 ? _adv : MELEE_SPEED);
+      // Charge-home: a charging unit sprints the final gap into contact.
+      if (!isOverhang && effectiveOrder(s) === 'charge' &&
+          (dd - stopDist) < SPRINT_CHARGE_HOME_DIST && _canSprintNow(s)) {
+        s._sprinting = true;
+        spd *= SPRINT_MULT;
+      }
+      const step = Math.min(spd * dt, dd - stopDist);
       const nx = Phaser.Math.Clamp(s.container.x + ux * step, 8, W-8);
       const ny = Phaser.Math.Clamp(s.container.y + uy * step, 14, H-8);
       if      (!isBlocked(nx, ny)) { s.container.x = nx; s.container.y = ny; }
@@ -4787,7 +5122,7 @@ function updateArcher(s,nearest,nearDist,allies,dt,time) {
       }
     } else {
       faceTarget(s, ft.x, ft.y, dt);
-      moveUnit(s, ft.x, ft.y, ARCHER_SPEED, allies, dt);
+      moveUnit(s, ft.x, ft.y, baseSpeedFor(s), allies, dt);
     }
     return;
   }
@@ -4796,7 +5131,7 @@ function updateArcher(s,nearest,nearDist,allies,dt,time) {
   // Overrides global order AND the flee reflex below for eligible archers
   // (its retreat goes to own lines, not just "directly away").
   if (isSkirmishing(s)) {
-    _applySkirmishMovement(s, nearest, nearDist, shootRange, ARCHER_SPEED, allies, dt, _skirmForceRetreat(s));
+    _applySkirmishMovement(s, nearest, nearDist, shootRange, baseSpeedFor(s), allies, dt, _skirmForceRetreat(s));
     if (nearDist <= shootRange && time - s.lastAttack > ARCHER_CD * frenzyCooldownMult(s)) {
       s.lastAttack = time;
       fireArrow(s, nearest);
@@ -4813,12 +5148,38 @@ function updateArcher(s,nearest,nearDist,allies,dt,time) {
   // Survival reflex: archers always flee when an enemy is too close, even
   // on Hold or March — being overrun is worse than disobeying orders.
   if (nearDist < ARCHER_FLEE_RANGE) {
+    // Sprint away from a closing melee/cavalry threat (fireArrow suppresses
+    // shooting while sprinting, so this is a no-attack dash to safety).
+    if ((nearest.kind === 'melee' || nearest.kind === 'cavalry') && _canSprintNow(s)) {
+      s._sprinting = true;
+    }
     const dx=s.container.x-nearest.container.x, dy=s.container.y-nearest.container.y;
     const d=Math.hypot(dx,dy)||1;
-    moveUnit(s,s.container.x+(dx/d)*200,s.container.y+(dy/d)*200,ARCHER_SPEED,allies,dt);
+    moveUnit(s,s.container.x+(dx/d)*200,s.container.y+(dy/d)*200,baseSpeedFor(s),allies,dt);
     if (nearDist<=shootRange&&time-s.lastAttack> ARCHER_CD * frenzyCooldownMult(s)) {
       s.lastAttack=time;
       fireArrow(s,nearest);
+      if (s.hasBow && s.isSlinger && nearDist <= ARCHER_SHOOT_RANGE * archerRangeMult(s)) {
+        fireArrow(s, nearest, {weapon:'bow', dmgMult:0.2});
+      }
+    }
+    return;
+  }
+
+  // Duel-loss reform: once the AI's ranged screen was ordered back (lost an
+  // outnumbered ranged duel), keep its FOOT archers positioned just behind the
+  // melee line and firing — even after the melee stands down and charges — so
+  // they don't get dragged forward into the enemy. Cheap: one global latch plus
+  // a target on units already being iterated (no scans, no per-unit state).
+  // Sits below the survival flee reflex, so an archer with an enemy on top of
+  // it still flees first.
+  if (_aiState.rangedReformBehind && s.team === 'B' && _aiState.bMeleeLineX != null) {
+    const behindX = _aiState.bMeleeLineX + AI_SKIRM_RETREAT_BEHIND;
+    faceTarget(s, behindX, s.container.y, dt);   // look the way we're running; firing is facing-independent
+    moveUnit(s, behindX, s.container.y, baseSpeedFor(s), allies, dt);
+    if (nearDist <= shootRange && time - s.lastAttack > ARCHER_CD * frenzyCooldownMult(s)) {
+      s.lastAttack = time;
+      fireArrow(s, nearest);
       if (s.hasBow && s.isSlinger && nearDist <= ARCHER_SHOOT_RANGE * archerRangeMult(s)) {
         fireArrow(s, nearest, {weapon:'bow', dmgMult:0.2});
       }
@@ -4831,7 +5192,7 @@ function updateArcher(s,nearest,nearDist,allies,dt,time) {
   // (above) still applies if an enemy gets too close — survival first.
   const _mt_arch = getMoveTarget(s);
   if (_mt_arch) {
-    moveUnit(s, _mt_arch.x, _mt_arch.y, ARCHER_SPEED, allies, dt);
+    moveUnit(s, _mt_arch.x, _mt_arch.y, baseSpeedFor(s), allies, dt);
     if (nearDist <= shootRange && time - s.lastAttack > ARCHER_CD * frenzyCooldownMult(s)) {
       s.lastAttack = time;
       fireArrow(s, nearest);
@@ -4860,7 +5221,7 @@ function updateArcher(s,nearest,nearDist,allies,dt,time) {
     if (nearDist>shootRange) {
       // March/Charge speed lever (Hold/Fallback handled above).
       const advSpeed = advanceSpeedFor(s);
-      moveUnit(s, nearest.container.x, nearest.container.y, advSpeed > 0 ? advSpeed : ARCHER_SPEED, allies, dt);
+      moveUnit(s, nearest.container.x, nearest.container.y, advSpeed > 0 ? advSpeed : baseSpeedFor(s), allies, dt);
     }
     if (nearDist<=shootRange&&time-s.lastAttack> ARCHER_CD * frenzyCooldownMult(s)) {
       s.lastAttack=time;
@@ -4929,7 +5290,26 @@ function updateCavalry(s,nearest,nearDist,allies,dt,time) {
   // while the unit stays outside CAVALRY_RANGE, which skirmish guarantees).
   // This branch only drives movement, and overrides order/charge logic.
   if (isSkirmishing(s) && !(s.holdsInMelee && s.isEngaged)) {
-    _applySkirmishMovement(s, nearest, nearDist, ARCHER_SHOOT_RANGE, CAVALRY_SPEED, allies, dt, _skirmForceRetreat(s));
+    // Opening-skirmish cohesion: if this side has foot archers, advance at their
+    // pace until the side looses its first volley, so the ranged line stays
+    // together instead of the horse archers racing ahead. Full speed after that.
+    const capOpening = _teamHasFootRanged[s.team] && !_teamRangedFired[s.team];
+    const skirmSpeed = capOpening ? Math.min(baseSpeedFor(s), OPENING_RANGED_MATCH_SPEED) : baseSpeedFor(s);
+    _applySkirmishMovement(s, nearest, nearDist, ARCHER_SHOOT_RANGE, skirmSpeed, allies, dt, _skirmForceRetreat(s));
+    return;
+  }
+  // Duel-loss reform: after the AI lost an outnumbered ranged duel, keep team-B
+  // horse archers positioned just behind the melee line (firing via the bow/
+  // javelin blocks above) instead of letting a charge order turn them around
+  // to clash into the enemy line by themselves. This is only their DEFAULT —
+  // it yields to any AI-assigned move group (a flank or reposition), so the
+  // cavalry stay available for the AI to redirect even after retreating.
+  // Engaged cavalry fall through to fight. Same cheap latch, no extra scans.
+  if (_aiState.rangedReformBehind && s.team === 'B' && !s.isEngaged && !s._moveGroup &&
+      (s.hasBow || s.hasJavelin) && !s.firesInMelee && _aiState.bMeleeLineX != null) {
+    const behindX = _aiState.bMeleeLineX + AI_SKIRM_RETREAT_BEHIND;
+    faceTarget(s, nearest.container.x, nearest.container.y, dt);
+    moveUnit(s, behindX, s.container.y, baseSpeedFor(s), allies, dt);
     return;
   }
   // holdsInMelee kiters (Heavy Cavalry) that got caught (isEngaged) skip the
@@ -4946,7 +5326,7 @@ function updateCavalry(s,nearest,nearDist,allies,dt,time) {
       // take over next frame once isEngaged trips.
     } else {
       faceTarget(s, _mt_cav.x, _mt_cav.y, dt);
-      moveUnit(s, _mt_cav.x, _mt_cav.y, CAVALRY_SPEED, allies, dt);
+      moveUnit(s, _mt_cav.x, _mt_cav.y, baseSpeedFor(s), allies, dt);
       return;
     }
   }
@@ -4974,7 +5354,7 @@ function updateCavalry(s,nearest,nearDist,allies,dt,time) {
       }
     } else {
       faceTarget(s, ft.x, ft.y, dt);
-      moveUnit(s, ft.x, ft.y, CAVALRY_SPEED, allies, dt);
+      moveUnit(s, ft.x, ft.y, baseSpeedFor(s), allies, dt);
     }
     return;
   }
@@ -4994,7 +5374,7 @@ function updateCavalry(s,nearest,nearDist,allies,dt,time) {
   if (nearDist>CAVALRY_RANGE) {
     // March caps cavalry to the army's slowest-class pace; Charge uses full speed.
     const advSpeed = advanceSpeedFor(s);
-    moveUnit(s,chargeTarget.container.x,chargeTarget.container.y,advSpeed > 0 ? advSpeed : CAVALRY_SPEED,allies,dt);
+    moveUnit(s,chargeTarget.container.x,chargeTarget.container.y,advSpeed > 0 ? advSpeed : baseSpeedFor(s),allies,dt);
   } else if (time-s.lastAttack> CAVALRY_CD * frenzyCooldownMult(s)) {
     s.lastAttack=time; s.isSwinging=true; s.swingPhase=0;
     applyDamage(nearest,(s.unitDmg != null ? s.unitDmg : CAVALRY_DMG),s.team,s); spawnHit(nearest.container.x,nearest.container.y,false);
@@ -5007,6 +5387,8 @@ const JAVELIN_MAX_RANGE = Math.round(ARROW_MAX_RANGE / 3); // javelins: 1/3 of a
 
 function fireArrow(shooter,target,opts) {
   if (!shooter?.container?.active || !target?.container?.active) return;
+  if (shooter._sprinting) return;   // can't shoot while sprinting away
+  if (shooter.team === 'A' || shooter.team === 'B') _teamRangedFired[shooter.team] = true;
   opts = opts || {};
   // opts.weapon: 'sling' | 'bow' | 'javelin' | undefined (auto-detect from shooter.isSlinger)
   // opts.dmgMult: scales volley damage (default 1.0)
@@ -5167,6 +5549,8 @@ function getVulnerabilityMult(s, nowMs) {
 }
 
 function applyDamage(s, dmg, attackerTeam, attacker) {
+  // Exhausted attackers strike with less force.
+  if (attacker && attacker._exhausted) dmg *= EXHAUST_ATTACK_MULT;
   // Scale damage by attacker's health fraction (wounded formations fight less effectively)
   if (attacker && attacker.hp != null) {
     const atkMaxHp = (attacker.maxHp != null) ? attacker.maxHp
@@ -5237,6 +5621,7 @@ function applyDamage(s, dmg, attackerTeam, attacker) {
       if (apStrength > 0) effectiveArmor *= Math.max(0, 1 - 0.5 * apStrength);
     }
     effectiveArmor += statusArmorDelta(s);
+    effectiveArmor += stanceArmorDelta(s);   // shield-wall stance (melee)
     effectiveArmor = Math.max(0, Math.min(0.95, effectiveArmor));
     if (effectiveArmor > 0) dmg *= (1 - effectiveArmor);
   }
@@ -5784,6 +6169,23 @@ function geoBlockedAt(wx,wy){
   // mountain/ocean, so they're covered here or there.
   for(const b of _geo.bands){
     if((b.kind==='mountain' || b.kind==='river') && _geoInBand(b,x,y)) return true;
+  }
+  return false;
+}
+// The FAR BANK of an edge river — the strip between the river band and the map
+// edge. It's land, but unreachable (the river itself is impassable), so troops
+// may not be PLACED there during the draw phase (player or AI alike; enforced
+// via drawTerrainBlockedAt). Where the river turns off-map near the city its
+// field-side boundary drops past the edge and the zone naturally ends, keeping
+// that ground drawable. Tributary cuts (_geo.paths) are not bands — unaffected.
+function geoRiverFarBankAt(wx,wy){
+  if(!_geo) return false; const x=_geoQX(wx), y=wy;
+  for(const b of _geo.bands){
+    if(b.kind!=='river') continue;
+    if(x<b.x0||x>b.x1) continue;
+    const inner=_geoCD(b,x)+_geoHW(b,x);   // field-side river boundary, as offset from the edge
+    if(inner<=0) continue;                 // band has exited the map at this x
+    if(b.edge==='top' ? (y<inner) : (y>H-inner)) return true;
   }
   return false;
 }
@@ -8618,7 +9020,16 @@ function setupInput(scene) {
   // ── Draw (pointer down in draw zone) / Command General ──
   scene.input.on('pointerdown', pointer => {
     if (phase === 'draw' && troopsConfirmed) {
-      if (pointer.worldX <= DRAW_MAX_X && drawMode !== null && !geoImpassableWaterAt(pointer.worldX, pointer.worldY)) {
+      if (pointer.worldX <= DRAW_MAX_X && drawMode !== null &&
+          !drawTerrainBlockedAt(pointer.worldX, pointer.worldY)) {
+        // Fully-deployed gate: once every troop of the selected class (or
+        // subtype) is placed, new lines are refused — the player must Clear
+        // to redraw. (Extending an in-progress line is unaffected; general
+        // placement has its own 1/1 flow and is exempt.)
+        if (drawMode !== 'general' && _drawSelectionFull()) {
+          setStatus('All ' + _drawSelectionLabel() + ' troops are deployed, press Clear to redraw.');
+          return;
+        }
         isDrawing = true;
         currentStroke = [{x: pointer.worldX, y: pointer.worldY}];
         redrawTrail();
@@ -8649,12 +9060,19 @@ function setupInput(scene) {
     if (!pointer.isDown) return;
     if (isDrawing && phase === 'draw') {
       const p = {x: Math.min(pointer.worldX, DRAW_MAX_X), y: pointer.worldY};
-      if (geoImpassableWaterAt(p.x, p.y)) return;          // don't draw troops into the water
+      if (drawTerrainBlockedAt(p.x, p.y)) return; // no water/mountains/edge rivers/far banks
       const last = currentStroke[currentStroke.length - 1];
       if (Math.hypot(p.x - last.x, p.y - last.y) > 5) {
         currentStroke.push(p);
         redrawTrail();
         showPreview();
+        // Live tally: refresh deployed counts (including this in-progress
+        // stroke) so the player sees troops committing as they draw. Throttled.
+        const now = Date.now();
+        if (!window._lastLiveTallyT || now - window._lastLiveTallyT > 120) {
+          window._lastLiveTallyT = now;
+          updateVariantCounts(true);
+        }
       }
     } else if (isLassoing && phase === 'battle' && _activeTouches <= 1) {
       const wx = pointer.worldX, wy = pointer.worldY;
@@ -8901,23 +9319,36 @@ function evenPlaceAlong(stroke, want, sp, dense) {
 
 // Sample across all strokes, capping each stroke by how many fit,
 // then deduplicate so no two placements are closer than the spacing.
-function sampleStrokesCapFit(strokes, maxTotal, spacing) {
+// True where troops may not be PLACED during the draw phase: mountains and
+// edge rivers (geoBlockedAt) plus ocean/lagoons/harbors (geoImpassableWaterAt).
+// Tributary rivers (crossable water paths) are intentionally NOT included —
+// they only register in geoWaterAt. Applies to player and AI placement alike.
+function drawTerrainBlockedAt(x, y) {
+  return geoBlockedAt(x, y) || geoImpassableWaterAt(x, y) || geoRiverFarBankAt(x, y);
+}
+
+function sampleStrokesCapFit(strokes, maxTotal, spacing, lastResidual) {
   if (!strokes||strokes.length===0) return [];
   const sp = (spacing != null) ? spacing : FORM_SPACING;
   const densePts = strokes.map(s => greedyPlaceAlong(s, sp, null));   // full-density slots each line can hold
   const caps = densePts.map(d => d.length);
   const totalCap = caps.reduce((a,b)=>a+b,0);
-  const lengths = strokes.map(pts=>{
-    let l=0; for(let i=1;i<pts.length;i++) l+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);
-    return l;
-  });
-  const totalLen = lengths.reduce((a,b)=>a+b,0)||1;
-  let counts = strokes.map((s,i)=>Math.min(caps[i], Math.max(1, Math.round(lengths[i]/totalLen*maxTotal))));
-  let diff = Math.min(maxTotal,totalCap) - counts.reduce((a,b)=>a+b,0);
-  for (let i=0;i<strokes.length&&diff!==0;i++) {
-    const room = diff>0 ? caps[i]-counts[i] : counts[i]-1;
-    const adj = Math.sign(diff)*Math.min(Math.abs(diff),room);
-    counts[i]+=adj; diff-=adj;
+  let counts;
+  if (lastResidual && strokes.length >= 2) {
+    counts = strokeFairCounts(strokes, maxTotal, sp, true);
+  } else {
+    const lengths = strokes.map(pts=>{
+      let l=0; for(let i=1;i<pts.length;i++) l+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);
+      return l;
+    });
+    const totalLen = lengths.reduce((a,b)=>a+b,0)||1;
+    counts = strokes.map((s,i)=>Math.min(caps[i], Math.max(1, Math.round(lengths[i]/totalLen*maxTotal))));
+    let diff = Math.min(maxTotal,totalCap) - counts.reduce((a,b)=>a+b,0);
+    for (let i=0;i<strokes.length&&diff!==0;i++) {
+      const room = diff>0 ? caps[i]-counts[i] : counts[i]-1;
+      const adj = Math.sign(diff)*Math.min(Math.abs(diff),room);
+      counts[i]+=adj; diff-=adj;
+    }
   }
 
   // Gather all candidate points
@@ -8929,9 +9360,12 @@ function sampleStrokesCapFit(strokes, maxTotal, spacing) {
     else { candidates.push(...evenPlaceAlong(strokes[i], counts[i], sp, d)); }    // troop-limited: even spacing, full count
   }
 
-  // Greedy dedupe: accept a point only if it's ≥ spacing from all accepted points
+  // Greedy dedupe: accept a point only if it's ≥ spacing from all accepted
+  // points AND not on blocked terrain (mountains / edge rivers / deep water) —
+  // interpolation between stroke points can otherwise bridge a lagoon or band.
   const accepted=[];
   for (const p of candidates) {
+    if (drawTerrainBlockedAt(p.x, p.y)) continue;
     const tooClose = accepted.some(a=>Math.hypot(p.x-a.x,p.y-a.y)<sp);
     if (!tooClose) accepted.push({x:p.x, y:p.y});
     if (accepted.length>=maxTotal) break;
@@ -8943,8 +9377,22 @@ function sampleStrokesCapFit(strokes, maxTotal, spacing) {
 // distribution. Same algorithm sampleStrokesCapFit uses internally; exposed
 // here so preview/spawn/counter paths can compute fair shares across mixed
 // tagged+untagged stroke sets without performing a full sample.
-function strokeFairCounts(strokes, maxTotal, spacing) {
+// lastResidual (player draw paths only): all strokes EXCEPT the newest are
+// allocated first; the newest gets only the remaining pool. This stops an
+// in-progress (or newest) line from pulling troops off completed lines when
+// the pool is troop-limited — extending it just stretches its own troops.
+// AI paths keep plain fair-share so stroke order can't starve its wings.
+function strokeFairCounts(strokes, maxTotal, spacing, lastResidual) {
   if (!strokes || strokes.length === 0) return [];
+  if (lastResidual && strokes.length >= 2) {
+    const head = strokes.slice(0, -1);
+    const last = strokes[strokes.length - 1];
+    const sp = (spacing != null) ? spacing : FORM_SPACING;
+    const headCounts = strokeFairCounts(head, maxTotal, spacing, false);
+    const used = headCounts.reduce(function(a,b){return a+b;}, 0);
+    const lastCount = Math.max(0, Math.min(strokeFit(last, sp), maxTotal - used));
+    return headCounts.concat([lastCount]);
+  }
   const sp = (spacing != null) ? spacing : FORM_SPACING;
   const caps = strokes.map(function(s){ return strokeFit(s, sp); });
   const totalCap = caps.reduce(function(a,b){return a+b;}, 0);
@@ -9029,7 +9477,7 @@ function showPreview() {
     // uniformly across all strokes (no tagged strokes possible).
     if (Object.keys(troops).length === 0) {
       if (strokes.length > 0 && strokes.some(function(s){return s.length>=2;})) {
-        const pts = sampleStrokesCapFit(strokes, classCap, sp);
+        const pts = sampleStrokesCapFit(strokes, classCap, sp, true);
         pts.forEach(function(p){ renderFn(p); });
       }
       if (liveStroke) {
@@ -9054,7 +9502,7 @@ function showPreview() {
       return;
     }
 
-    const fairShares = strokeFairCounts(strokes, totalRemaining, sp);
+    const fairShares = strokeFairCounts(strokes, totalRemaining, sp, true);
     const _fsIdx = new Map();
     strokes.forEach(function(s, i){ _fsIdx.set(s, i); });
 
@@ -9091,7 +9539,7 @@ function showPreview() {
         alloc = remaining[sub] || 0;
       }
       if (alloc <= 0) return;
-      const subCounts = strokeFairCounts(subStrokes, alloc, sp);
+      const subCounts = strokeFairCounts(subStrokes, alloc, sp, true);
       let subRendered = 0;
       for (let i = 0; i < subStrokes.length; i++) {
         if (subCounts[i] <= 0) continue;
@@ -9108,7 +9556,7 @@ function showPreview() {
     // without tagged strokes. Per-stroke sampling for the same reason as Pass 1.
     const leftover = totalRemaining - totalRendered;
     if (untaggedStrokes.length > 0 && leftover > 0) {
-      const counts = strokeFairCounts(untaggedStrokes, leftover, sp);
+      const counts = strokeFairCounts(untaggedStrokes, leftover, sp, true);
       for (let i = 0; i < untaggedStrokes.length; i++) {
         if (counts[i] <= 0) continue;
         const pts = sampleStrokesCapFit([untaggedStrokes[i]], counts[i], sp);
@@ -9899,6 +10347,8 @@ function createUnit(scene,x,y,team,kind,subtype) {
     _lastJavAttack: hasJavelinSub(subtype)   ? -Math.random() * ARCHER_CD : undefined,
     flashTimer: 0,
     vulnOverlay: vulnOverlay,
+    stamina: STAMINA_MAX,
+    _exhausted: false,
     // Spear mechanic — only populated for hoplite/alexandrian, otherwise
     // hasSpear=false and all reach/hit fields are zero (no-op everywhere).
     hasSpear:         _spearCfg.hasSpear,
@@ -10194,6 +10644,7 @@ function endBattle(winner, reason) {
   setSurrenderVisible(false);
   showHUD(false);
   (function(){var _s=document.getElementById('stance-corner');if(_s)_s.style.display='none'})();
+  (function(){var _s=document.getElementById('stamina-bars');if(_s)_s.style.display='none'})();
   (function(){var _s=document.getElementById('command-orders');if(_s)_s.style.display='none'})();
   (function(){var _s=document.getElementById('ui-strip');if(_s)_s.style.display='flex'})();
   document.getElementById('btn-clear').disabled=false;
@@ -10812,10 +11263,14 @@ function renderSelector() {
   const CLASS_TOTAL = { melee:MELEE_COUNT, archer:ARCHER_COUNT, cavalry:CAVALRY_COUNT };
 
   function variantsFor(cls) {
+    const hasArmy = Object.keys(troops).length > 0;
     return Object.keys(UNIT_STATS).filter(function(k){
       if (UNIT_STATS[k].class !== cls) return false;
       if (UNIT_STATS[k].side === playerSide) {
         if (isVariantLocked(playerSide, k)) return false;   // hide locked natives
+        // Hide unlocked natives the army doesn't actually field. Sandbox /
+        // quick battle has no per-variant data — show all unlocked there.
+        if (hasArmy && (troops[k] || 0) <= 0) return false;
         return true;
       }
       return (troops[k] || 0) > 0;                           // mercs only when present
@@ -10831,10 +11286,11 @@ function renderSelector() {
     card.className = 'group-card';
 
     const lbl = document.createElement('div');
-    lbl.className = 'class-label ' + cls + ((drawMode === cls && !drawSubtype) ? ' active' : '');
     lbl.setAttribute('data-class', cls);
     let dep = 0; subs.forEach(function(s){ dep += deployed[s] || 0; });
     dep = Math.min(CLASS_TOTAL[cls], dep);
+    lbl.className = 'class-label ' + cls + ((drawMode === cls && !drawSubtype) ? ' active' : '')
+                  + (dep < CLASS_TOTAL[cls] ? ' swirl-cta' : '');
     lbl.innerHTML = '<span>' + CLASS_LABEL[cls] + '</span>'
                   + '<span class="cl-total">' + dep + ' / ' + CLASS_TOTAL[cls] + '</span>';
     lbl.addEventListener('click', function(){
@@ -10850,7 +11306,8 @@ function renderSelector() {
       const n  = troops[sub] || 0;
       const isMerc = st.side !== playerSide;
       const b = document.createElement('div');
-      b.className = 'sub-btn' + (n === 0 ? ' disabled' : '') + (drawSubtype === sub ? ' active' : '');
+      b.className = 'sub-btn ' + cls + (n === 0 ? ' disabled' : '') + (drawSubtype === sub ? ' active' : '')
+                  + (n > 0 && (deployed[sub] || 0) < n ? ' swirl-cta' : '');
       b.setAttribute('data-sub', sub);
       b.title = st.label || sub;
       const dp = deployed[sub] || 0;
@@ -10878,8 +11335,10 @@ function renderSelector() {
     const card = document.createElement('div');
     card.className = 'group-card';
     const lbl = document.createElement('div');
-    lbl.className = 'class-label general' + (drawMode === 'general' ? ' active' : '');
     const gDep = (typeof generalStrokes !== 'undefined' && generalStrokes.flat().length >= 1) ? 1 : 0;
+    lbl.className = 'class-label general' + (drawMode === 'general' ? ' active' : '')
+                  + (gDep < 1 ? ' swirl-cta' : '');
+    lbl.setAttribute('data-class', 'general');
     lbl.innerHTML = '<span>General</span><span class="cl-total">' + gDep + ' / 1</span>';
     lbl.addEventListener('click', function(){
       setDrawMode(drawMode === 'general' ? null : 'general');
@@ -10895,9 +11354,41 @@ function rebuildVariantRow(){ renderSelector(); }
 // Compute deployed-unit count per variant subtype based on current strokes.
 // Mirrors _spawnClassStrokes logic exactly so the displayed counter matches
 // what will actually spawn at battle start.
-function countDeployedBySubtype() {
+// True when every troop of the player's current draw selection (subtype if one
+// is narrowed, else the whole class) is already deployed on committed strokes.
+function _drawSelectionFull() {
+  const troops = window._armyTroops || {};
+  if (Object.keys(troops).length === 0) return false;   // sandbox: no per-variant data
+  const deployed = countDeployedBySubtype();
+  if (drawSubtype) return (deployed[drawSubtype] || 0) >= (troops[drawSubtype] || 0);
+  let dep = 0, tot = 0;
+  Object.keys(troops).forEach(function(k){
+    if (UNIT_STATS[k] && UNIT_STATS[k].class === drawMode) { dep += deployed[k] || 0; tot += troops[k] || 0; }
+  });
+  return tot > 0 && dep >= tot;
+}
+function _drawSelectionLabel() {
+  if (drawSubtype) return (UNIT_STATS[drawSubtype] && UNIT_STATS[drawSubtype].label) || drawSubtype;
+  return drawMode === 'melee' ? 'Melee' : drawMode === 'archer' ? 'Archer' : 'Cavalry';
+}
+
+function countDeployedBySubtype(includeLive) {
   const result = {};
   Object.keys(UNIT_STATS).forEach(function(k){ result[k] = 0; });
+
+  // When requested, include the in-progress stroke (appended LAST, tagged with
+  // the active subtype) so the live tally reflects troops mid-draw.
+  const liveCls = (includeLive && isDrawing && currentStroke.length >= 2 &&
+                   (drawMode === 'melee' || drawMode === 'archer' || drawMode === 'cavalry'))
+                  ? drawMode : null;
+  let liveStroke = null;
+  if (liveCls) {
+    liveStroke = currentStroke.slice();
+    if (drawSubtype) liveStroke._subtype = drawSubtype;
+  }
+  function _withLive(arr, cls) {
+    return (liveCls === cls) ? arr.concat([liveStroke]) : arr;
+  }
 
   function _countClass(allStrokes, cls) {
     if (!allStrokes || allStrokes.length === 0) return;
@@ -10921,7 +11412,7 @@ function countDeployedBySubtype() {
     const totalRemaining = Object.values(remaining).reduce(function(a,b){return a+b;}, 0);
     if (totalRemaining === 0) return;
 
-    const fairShares = strokeFairCounts(allStrokes, totalRemaining, sp);
+    const fairShares = strokeFairCounts(allStrokes, totalRemaining, sp, true);
     const _fsIdx = new Map();
     allStrokes.forEach(function(s, i){ _fsIdx.set(s, i); });
 
@@ -10953,7 +11444,7 @@ function countDeployedBySubtype() {
         alloc = remaining[sub] || 0;
       }
       if (alloc <= 0) return;
-      const subCounts = strokeFairCounts(subStrokes, alloc, sp);
+      const subCounts = strokeFairCounts(subStrokes, alloc, sp, true);
       let subTotal = 0;
       for (let i = 0; i < subStrokes.length; i++) {
         if (subCounts[i] <= 0) continue;
@@ -10972,7 +11463,7 @@ function countDeployedBySubtype() {
       Object.keys(remaining).forEach(function(s){
         for (let i = 0; i < (remaining[s] || 0); i++) slotSubs.push(s);
       });
-      const untaggedCounts = strokeFairCounts(untaggedStrokes, leftover, sp);
+      const untaggedCounts = strokeFairCounts(untaggedStrokes, leftover, sp, true);
       let slotIdx = 0;
       for (let si = 0; si < untaggedStrokes.length; si++) {
         const points = sampleStrokesCapFit([untaggedStrokes[si]], untaggedCounts[si], sp);
@@ -10983,35 +11474,50 @@ function countDeployedBySubtype() {
     }
   }
 
-  _countClass(meleeStrokes,   'melee');
-  _countClass(archerStrokes,  'archer');
-  _countClass(cavalryStrokes, 'cavalry');
+  _countClass(_withLive(meleeStrokes,   'melee'),   'melee');
+  _countClass(_withLive(archerStrokes,  'archer'),  'archer');
+  _countClass(_withLive(cavalryStrokes, 'cavalry'), 'cavalry');
   return result;
 }
 
 // Lightweight in-place update of variant counter spans. Avoids full rebuild
 // of the variant row (preserves focus and active-state styling).
-function updateVariantCounts() {
+// includeLive: also count the in-progress stroke (live tally while drawing).
+// Also toggles the .swirl-cta call-to-action ring so it extinguishes the
+// moment a subtype/class becomes fully deployed — even mid-stroke.
+function updateVariantCounts(includeLive) {
   const host = document.getElementById('troop-selector');
   if (!host) return;
-  const deployed = countDeployedBySubtype();
+  const deployed = countDeployedBySubtype(includeLive);
   const troops = window._armyTroops || {};
   host.querySelectorAll('.sub-btn[data-sub]').forEach(function(btn){
     const sub = btn.getAttribute('data-sub');
     const cnt = btn.querySelector('.s-cnt');
-    if (cnt) cnt.textContent = (deployed[sub] || 0) + ' / ' + (troops[sub] || 0);
+    const n = troops[sub] || 0;
+    if (cnt) cnt.textContent = (deployed[sub] || 0) + ' / ' + n;
+    btn.classList.toggle('swirl-cta', n > 0 && (deployed[sub] || 0) < n);
   });
   const CLASS_TOTAL = { melee:MELEE_COUNT, archer:ARCHER_COUNT, cavalry:CAVALRY_COUNT };
   host.querySelectorAll('.class-label[data-class]').forEach(function(lbl){
     const cls = lbl.getAttribute('data-class');
     const cnt = lbl.querySelector('.cl-total');
     if (!cnt) return;
+    // General: 1-of-1 placement, tracked by generalStrokes rather than
+    // per-subtype troop counts. Keeps its count and swirl live on pointerup
+    // and Clear (both only run this in-place refresh, not a full rebuild).
+    if (cls === 'general') {
+      const gDep = (typeof generalStrokes !== 'undefined' && generalStrokes.flat().length >= 1) ? 1 : 0;
+      cnt.textContent = gDep + ' / 1';
+      lbl.classList.toggle('swirl-cta', gDep < 1);
+      return;
+    }
     let dep = 0;
     Object.keys(deployed).forEach(function(s){
       if (UNIT_STATS[s] && UNIT_STATS[s].class === cls) dep += deployed[s];
     });
     dep = Math.min(CLASS_TOTAL[cls] || 0, dep);
     cnt.textContent = dep + ' / ' + (CLASS_TOTAL[cls] || 0);
+    lbl.classList.toggle('swirl-cta', dep < (CLASS_TOTAL[cls] || 0));
   });
 }
 
@@ -11106,6 +11612,7 @@ function clearDrawing() {
     (function(){var _s=document.getElementById('results-panel');if(_s)_s.style.display='none'})();
     showHUD(false);
     (function(){var _s=document.getElementById('stance-corner');if(_s)_s.style.display='none'})();
+  (function(){var _s=document.getElementById('stamina-bars');if(_s)_s.style.display='none'})();
     (function(){var _s=document.getElementById('command-orders');if(_s)_s.style.display='none'})();
     (function(){var _s=document.getElementById('ui-strip');if(_s)_s.style.display='flex'})();
     // Restart draw phase with same counts
@@ -11263,7 +11770,8 @@ function commitBattle() {
       }
     }
 
-    const fairShares = strokeFairCounts(strokes, totalRemaining, classSpacing);
+    const _lastRes = (team === 'A');   // player draw semantics only; AI keeps plain fair-share
+    const fairShares = strokeFairCounts(strokes, totalRemaining, classSpacing, _lastRes);
     const _fsIdx = new Map();
     strokes.forEach(function(s, i){ _fsIdx.set(s, i); });
 
@@ -11288,7 +11796,7 @@ function commitBattle() {
         alloc = remaining[sub] || 0;
       }
       if (alloc <= 0) return;
-      const subCounts = strokeFairCounts(subStrokes, alloc, classSpacing);
+      const subCounts = strokeFairCounts(subStrokes, alloc, classSpacing, _lastRes);
       for (let i = 0; i < subStrokes.length; i++) {
         if (subCounts[i] > 0) _spawnOnStroke(subStrokes[i], sub, subCounts[i]);
       }
@@ -11307,7 +11815,7 @@ function commitBattle() {
       for (let i = 0; i < (remaining[s] || 0); i++) slotSubs.push(s);
     });
 
-    const untaggedCounts = strokeFairCounts(untaggedStrokes, leftover, classSpacing);
+    const untaggedCounts = strokeFairCounts(untaggedStrokes, leftover, classSpacing, _lastRes);
     let slotIdx = 0;
     for (let si = 0; si < untaggedStrokes.length; si++) {
       const stroke = untaggedStrokes[si];
@@ -11438,6 +11946,9 @@ function commitBattle() {
         if (count>0) setBattleStatus('\u2694  ' + count + '  \u2694');
         else { clearInterval(cd); setBattleStatus('Fight!'); battleStarted=true; setSurrenderVisible(true);
           initBattleStats();
+          _teamHasFootRanged.A = soldiers.some(s=>s.alive&&s.team==='A'&&s.kind==='archer');
+          _teamHasFootRanged.B = soldiers.some(s=>s.alive&&s.team==='B'&&s.kind==='archer');
+          _teamRangedFired.A = false; _teamRangedFired.B = false;
           (function(){var _s=document.getElementById('btn-battle-stats');if(_s)_s.style.display='block';})();
           blueStart = soldiers.filter(s=>s.team==='A'&&s.alive).length;
           redStart  = soldiers.filter(s=>s.team==='B'&&s.alive).length;
@@ -11452,6 +11963,7 @@ function commitBattle() {
           redStartStr  = soldiers.filter(s=>s.team==='B'&&s.alive).reduce((sum,s)=>sum+_startDmg(s), 0);
           showHUD(true);
           (function(){var _s=document.getElementById('stance-corner');if(_s)_s.style.display='flex'})();
+          (function(){var _s=document.getElementById('stamina-bars');if(_s)_s.style.display='flex'})();
           (function(){var _s=document.getElementById('command-orders');if(_s)_s.style.display='flex'})();
           (function(){var _s=document.getElementById('btn-move-order');if(_s)_s.style.display='block'})();
           (function(){var _s=document.getElementById('btn-form-line');if(_s){_s.style.display='block';_s.classList.remove('active');}})();
@@ -13246,10 +13758,7 @@ function updateGlobalOrderState() {
   let aMin = Infinity, bMin = Infinity;
   for (const s of soldiers) {
     if (!s.alive || s.kind === 'general') continue;
-    const sp =
-      s.kind === 'cavalry' ? CAVALRY_SPEED :
-      s.kind === 'archer'  ? ARCHER_SPEED  :
-                             MELEE_SPEED;
+    const sp = baseSpeedFor(s);
     if (s.team === 'A' && sp < aMin) aMin = sp;
     if (s.team === 'B' && sp < bMin) bMin = sp;
   }
@@ -13283,11 +13792,7 @@ function fallbackTargetX(team) {
 // caller, so the speed lever is independent of direction).
 function advanceSpeedFor(s) {
   const ord = effectiveOrder(s);
-  const baseSpeed =
-    s.kind === 'cavalry' ? CAVALRY_SPEED :
-    s.kind === 'archer'  ? ARCHER_SPEED  :
-    s.kind === 'general' ? GENERAL_SPEED :
-                           MELEE_SPEED;
+  const baseSpeed = baseSpeedFor(s);
   if (ord === 'charge') return baseSpeed;
   if (ord === 'march') {
     // March pace = 60% of the army's slowest-class speed. The slowest cap
@@ -13306,6 +13811,21 @@ function advanceSpeedFor(s) {
 // Phase 2: enemyOrder is now driven by faction doctrine. Cavalry flanking
 // uses the existing _moveGroup system (the same one player move-orders use).
 // Reads doctrine from FACTION_DOCTRINE[enemySide], modulated by BATTLE_TECH.B.
+// Tactical-AI tunables (Phase 3: clinch-timed flanking + weak-sector concentration).
+// Real cavalry commits at the clinch (not at t=0) and aims at the enemy's
+// thinnest sector; a melee sub-group can peel off to concentrate on that point.
+const AI_CLINCH_FRAC       = 0.30;  // melee engaged-fraction (BOTH sides) that counts as "lines clinched"
+const AI_FLANK_MAX_WAIT_SEC = 12;   // Persian envelops anyway after this long if no clinch (anti-stall vs a kiting player)
+const AI_CAV_RETASK_COOLDOWN_MS = 5000; // min interval between cavalry (re)tasks — throttles re-evaluation of free cavalry
+const AI_CAV_TASK_MIN      = 2;     // need at least this many FREE cavalry to issue a (re)task
+const AI_WEAK_RATIO_GATE   = 0.70;  // a sector is "weak" when its strength < gate × mean sector strength
+const AI_WEAK_MIN_UNITS    = 6;     // need at least this many player melee before a weak-sector scan is meaningful
+const AI_PEEL_FRAC         = 0.33;  // #2: max fraction of B melee to peel into a concentration sub-group
+const AI_PEEL_MIN          = 2;     // #2: don't bother peeling fewer than this
+const AI_CONCENTRATE_COOLDOWN_MS = 6000; // #2: min interval between melee weak-sector concentration peels
+const AI_SKIRM_RETREAT_BEHIND = 120; // px behind the melee centroid where a duel-losing AI ranged screen re-forms (still in firing range)
+const OPENING_RANGED_MATCH_SPEED = 72; // horse archers advance at this (foot-archer) pace during the opening skirmish, until first shots
+
 let _aiState = {
   initialized:            false,
   battleStartTime:        0,
@@ -13313,8 +13833,14 @@ let _aiState = {
   lastOrderChange:        0, // hysteresis for B-team enemyOrder
   lastOrderChangeA:       0, // hysteresis for A-team globalOrder when AI takes over
   flankGroups:            { top: null, bottom: null }, // _moveGroup refs
-  proactiveFlankLaunched: false,
+  cavTasked:              false, // at least one cavalry task has been issued (past the initial clinch gate)
+  lastCavTask:           -999999, // scaledTime of the last cavalry (re)task, for the retask cooldown
   reactiveDefenseActive:  false,
+  lastMeleeConcentrate:  -999999, // scaledTime of the last melee weak-sector concentration peel (cooldown)
+  meleeConcentrateGroup:  null,   // _moveGroup ref for the current concentration peel (for collapse-recall)
+  bMeleeLineX:            null,  // cached B melee centroid x (for duel-loss ranged re-form)
+  rangedReformBehind:     false, // after a lost ranged duel, B foot archers hug just behind the melee line
+  meleeFireStart:         -1,    // scaledTime the exposed melee first took player arrow fire (post-retreat)
   skirmAdvanced:          false, // AI ranged have screened in front of the line at least once
   skirmRetreat:           false  // AI ranged are pulling back to the line (losing the duel)
 };
@@ -13331,8 +13857,14 @@ function _aiResetState() {
   _aiState.lastOrderChange        = 0;
   _aiState.lastOrderChangeA       = 0;
   _aiState.flankGroups            = { top: null, bottom: null };
-  _aiState.proactiveFlankLaunched = false;
+  _aiState.cavTasked              = false;
+  _aiState.lastCavTask            = -999999;
   _aiState.reactiveDefenseActive  = false;
+  _aiState.lastMeleeConcentrate   = -999999;
+  _aiState.meleeConcentrateGroup  = null;
+  _aiState.bMeleeLineX            = null;
+  _aiState.rangedReformBehind     = false;
+  _aiState.meleeFireStart         = -1;
   _aiState.skirmAdvanced          = false;
   _aiState.skirmRetreat           = false;
   _bSkirmLastHit                  = -99999;
@@ -13406,6 +13938,48 @@ function _aiComputeBattleState(time) {
     aFlankTopN, aFlankBotN,
     aMx, aMy, bMx, bMy, bArcCx, bArcCy,
     bSkirmN, bSkirmCx, bSkirmCy, aSkirmN
+  };
+}
+
+// Scan the player (team A) melee line for its weakest vertical sector, so the
+// AI can aim its cavalry hook (#1) and a melee concentration sub-group (#2) at
+// the thinnest point. Splits the player melee's own y-span into three bands,
+// sums strength (dmg) per band, and reports the lightest — but only flags
+// concentrate=true when that band is clearly lighter than the mean (else the
+// line is even, no weak point worth exploiting). Validated in scan_harness.js.
+function _aiScanWeakSector() {
+  const melee = [];
+  let yMin = Infinity, yMax = -Infinity;
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'A' || s.kind !== 'melee') continue;
+    const y = s.container.y;
+    const dmg = (s.unitDmg != null ? s.unitDmg : s.dmg) || 0;
+    melee.push({ y, dmg });
+    if (y < yMin) yMin = y;
+    if (y > yMax) yMax = y;
+  }
+  if (melee.length < AI_WEAK_MIN_UNITS || (yMax - yMin) < 1) {
+    return { concentrate: false, weakSide: 'center', targetY: H / 2 };
+  }
+  const span = yMax - yMin, bandH = span / 3;
+  const bands = [
+    { name: 'top',    lo: yMin,             hi: yMin + bandH,     str: 0, n: 0, cy: 0 },
+    { name: 'center', lo: yMin + bandH,     hi: yMin + 2 * bandH, str: 0, n: 0, cy: 0 },
+    { name: 'bottom', lo: yMin + 2 * bandH, hi: yMax + 1,         str: 0, n: 0, cy: 0 }
+  ];
+  for (const m of melee) {
+    const b = m.y < bands[0].hi ? bands[0] : (m.y < bands[1].hi ? bands[1] : bands[2]);
+    b.str += m.dmg; b.n++; b.cy += m.y;
+  }
+  for (const b of bands) if (b.n > 0) b.cy /= b.n;
+  const mean = (bands[0].str + bands[1].str + bands[2].str) / 3;
+  let weak = bands[0];
+  for (const b of bands) if (b.str < weak.str) weak = b;
+  return {
+    concentrate: mean > 0 && weak.str < AI_WEAK_RATIO_GATE * mean,
+    weakSide:    weak.name,
+    targetY:     Math.round(weak.n > 0 ? weak.cy : (weak.lo + weak.hi) / 2)
   };
 }
 
@@ -13504,18 +14078,22 @@ function _aiUpdateOrderForA(state, time) {
 // Build a 3-waypoint flank path: pull to wing, cross at edge, hook into rear.
 // Player spawn is x<NO_MAN_X1 (left), so flanking enemy crosses at the top
 // or bottom of the map and dives into player territory.
-function _aiBuildFlankPath(side) {
+function _aiBuildFlankPath(side, targetY) {
   const isTop  = side === 'top';
-  const safeT  = Math.round(H * 0.15) + 50;   // ≈ 290
-  const safeB  = Math.round(H * 0.85) - 50;   // ≈ 1310
+  const safeT  = Math.round(H * 0.15) + 50;   // ≈ 770
+  const safeB  = Math.round(H * 0.85) - 50;   // ≈ 4030
   const wingY  = isTop ? safeT + 20 : safeB - 20;
   const crossX = NO_MAN_X1 - 100;             // just inside player territory at the edge
   const rearX  = 350;                         // deep in player rear
-  const rearY  = isTop ? H / 2 - 100 : H / 2 + 100;
+  // Final hook aims at the weak sector when given one; otherwise the default
+  // rear position for this wing. Clamped to stay on the field.
+  const rearY  = (targetY != null)
+    ? Math.max(280, Math.min(H - 280, targetY))
+    : (isTop ? H / 2 - 100 : H / 2 + 100);
   return [
     { x: crossX + 200, y: wingY },            // 1. pull to top/bottom edge while still in own territory
     { x: crossX,       y: wingY },            // 2. cross at the edge
-    { x: rearX,        y: rearY }             // 3. hook inward toward player rear
+    { x: rearX,        y: rearY }             // 3. hook inward toward the weak sector / player rear
   ];
 }
 
@@ -13529,31 +14107,17 @@ function _aiAssignMoveGroup(soldiersList, path) {
     s._moveGroup = moveGroup;
     s._movePathIdx = 0;
     s.isFollowing = false;
+    s._orderOverride = null;   // path movement takes over; drop any reserve-hold override
     _detachFromLine(s);
   }
   return moveGroup;
 }
 
-// One-shot init at battle start: launch doctrinal flank groups (Persian
-// dual envelopment) by sorting B cavalry into top/bottom wings by y.
-function _aiInitFlanking() {
-  const flanking = (FACTION_DOCTRINE[enemySide] || FACTION_DOCTRINE.greece).flanking;
-  if (!flanking.defaultActive) return;
-  const topCav = [], botCav = [];
-  for (const s of soldiers) {
-    if (!s.alive || !s.container?.active) continue;
-    if (s.team !== 'B' || s.kind !== 'cavalry') continue;
-    if (s.container.y < H / 2 - 100)      topCav.push(s);
-    else if (s.container.y > H / 2 + 100) botCav.push(s);
-    // Cavalry within ±100 of midline stays in central reserve (no flank)
-  }
-  if (topCav.length > 0) {
-    _aiState.flankGroups.top    = _aiAssignMoveGroup(topCav, _aiBuildFlankPath('top'));
-  }
-  if (botCav.length > 0) {
-    _aiState.flankGroups.bottom = _aiAssignMoveGroup(botCav, _aiBuildFlankPath('bottom'));
-  }
-}
+// Flanking launches on the infantry clinch (see _aiManageFlanks), not at
+// battle start. Cavalry are free to act under the global order until then —
+// horse archers skirmish, shock cavalry advance with the army. Kept as a
+// no-op so the tickEnemyAI init call site stays valid.
+function _aiInitFlanking() { /* clinch-gated: see _aiManageFlanks primary launch */ }
 
 // Per-tick flanking management: proactive launch (Greek when winning),
 // reactive defense (Greek intercepting player flanks), and recall for
@@ -13563,31 +14127,77 @@ function _aiManageFlanks(state, time) {
   const tech = BATTLE_TECH.B || {};
   const speedTechActive = (tech.speedCavalry || 0) >= 15;
 
-  // Greek proactive flank: launch one wing when force ratio is dominant
-  // AND own cavalry is healthy. Picks the wing closer to player archers.
-  if (!flanking.defaultActive && !_aiState.proactiveFlankLaunched) {
-    const triggerRatio = speedTechActive
-      ? Math.max(1.20, flanking.activateWhenForceRatioGte - 0.20)
-      : flanking.activateWhenForceRatioGte;
-    if (state.forceRatio >= triggerRatio) {
-      // Check own cav HP fraction
-      let cavHp = 0, cavMaxHp = 0, available = [];
+  // Cavalry tasking — REPEATABLE. Once the lines clinch (or Persia's anti-stall
+  // wait elapses), FREE cavalry are periodically committed to a task aimed at the
+  // player's current weak sector: Persian double-envelops, Greek commits one
+  // opportunistic wing. "Free" = alive, not engaged/routing, and not already in a
+  // move group — so idle cavalry, reformed horse archers, and units that have
+  // finished a prior hook all get re-tasked, while committed ones are left alone.
+  // A cooldown throttles re-evaluation. This is what lets the AI keep redirecting
+  // its cavalry throughout the battle rather than in a single one-shot flank.
+  {
+    const battleAge = (time - _aiState.battleStartTime) / 1000;
+    const clinched  = state.bMeleeEngagedFrac >= AI_CLINCH_FRAC &&
+                      state.aMeleeEngagedFrac >= AI_CLINCH_FRAC;
+    const mayTask = clinched || _aiState.cavTasked ||
+                    (flanking.defaultActive && battleAge >= AI_FLANK_MAX_WAIT_SEC);
+    const offCooldown = (time - _aiState.lastCavTask) >= AI_CAV_RETASK_COOLDOWN_MS;
+
+    if (mayTask && offCooldown) {
+      // Gather FREE cavalry. Horse archers are included only once they've been
+      // forced back from a lost ranged duel; otherwise they keep skirmishing.
+      let cavHp = 0, cavMaxHp = 0;
+      const topCav = [], botCav = [], allCav = [];
       for (const s of soldiers) {
         if (!s.alive || !s.container?.active) continue;
         if (s.team !== 'B' || s.kind !== 'cavalry') continue;
+        const horseArcher = (s.hasBow || s.hasJavelin) && !s.firesInMelee;
+        if (horseArcher && !_aiState.rangedReformBehind) continue;
         cavHp += s.hp || 0; cavMaxHp += s.maxHp || s.hp || 1;
-        if (!s._moveGroup) available.push(s);
+        if (s._moveGroup || s.isEngaged || s.isRouting) continue;   // busy → not free
+        allCav.push(s);
+        if (s.container.y < H / 2 - 100)      topCav.push(s);
+        else if (s.container.y > H / 2 + 100) botCav.push(s);
       }
-      const hpOk = cavMaxHp === 0 || (cavHp / cavMaxHp) >= (flanking.cavHpMinForFlank || 0);
-      if (hpOk && available.length >= 2) {
-        // Side closer to player archers gets the flank
-        const side = state.bArcCy < H / 2 ? 'top' : 'bottom';
-        const wingCav = available.filter(function(s) {
-          return side === 'top' ? s.container.y < H/2 - 50 : s.container.y > H/2 + 50;
-        });
-        const pick = wingCav.length > 0 ? wingCav : available;
-        _aiAssignMoveGroup(pick, _aiBuildFlankPath(side));
-        _aiState.proactiveFlankLaunched = true;
+      const hpOk = cavMaxHp === 0 ||
+                   (cavHp / cavMaxHp) >= (flanking.cavHpMinForFlank || 0);
+
+      if (hpOk && allCav.length >= AI_CAV_TASK_MIN) {
+        const weak = _aiScanWeakSector();
+        if (flanking.defaultActive) {
+          // Persian double envelopment (each wing that has free cavalry). The
+          // weak-side wing hooks at the weak sector; the other runs its default.
+          if (topCav.length) {
+            const ty = (weak.concentrate && weak.weakSide === 'top') ? weak.targetY : null;
+            _aiState.flankGroups.top = _aiAssignMoveGroup(topCav, _aiBuildFlankPath('top', ty));
+          }
+          if (botCav.length) {
+            const ty = (weak.concentrate && weak.weakSide === 'bottom') ? weak.targetY : null;
+            _aiState.flankGroups.bottom = _aiAssignMoveGroup(botCav, _aiBuildFlankPath('bottom', ty));
+          }
+          _aiState.cavTasked = true;
+          _aiState.lastCavTask = time;
+        } else {
+          // Greek opportunistic single wing — only when healthy AND (dominant OR
+          // a clear weak sector). Otherwise the cavalry keep guarding the flanks.
+          const triggerRatio = speedTechActive
+            ? Math.max(1.20, flanking.activateWhenForceRatioGte - 0.20)
+            : flanking.activateWhenForceRatioGte;
+          const ratioOk = state.forceRatio >= triggerRatio;
+          if (ratioOk || weak.concentrate) {
+            const side = (weak.concentrate && weak.weakSide !== 'center')
+              ? weak.weakSide
+              : (state.bArcCy < H / 2 ? 'top' : 'bottom');
+            const wingCav = allCav.filter(function(s) {
+              return side === 'top' ? s.container.y < H/2 - 50 : s.container.y > H/2 + 50;
+            });
+            const pick = wingCav.length > 0 ? wingCav : allCav;
+            const ty = (weak.concentrate && side === weak.weakSide) ? weak.targetY : null;
+            _aiState.flankGroups[side] = _aiAssignMoveGroup(pick, _aiBuildFlankPath(side, ty));
+            _aiState.cavTasked = true;
+            _aiState.lastCavTask = time;
+          }
+        }
       }
     }
   }
@@ -13608,7 +14218,7 @@ function _aiManageFlanks(state, time) {
       if (available.length > 0) {
         const interceptY = threatTop ? state.bMy - 250 : state.bMy + 250;
         // Intercept just behind own line at the threatened y
-        const interceptPath = [{ x: state.bMx + 100, y: Math.max(280, Math.min(1320, interceptY)) }];
+        const interceptPath = [{ x: state.bMx + 100, y: Math.max(280, Math.min(H - 280, interceptY)) }];
         _aiAssignMoveGroup(available, interceptPath);
         _aiState.reactiveDefenseActive = true;
       }
@@ -13631,6 +14241,68 @@ function _aiManageFlanks(state, time) {
   });
 }
 
+// #2 Concentration of force. When the player line has a CLEAR weak sector, peel
+// FREE (rear-rank, non-engaged) melee toward it and CHARGE (attack order). The
+// engaged front line is untouched — only uncommitted reserves redirect — so this
+// throws weight at the thin point without thinning the main clash. Repeatable on
+// a cooldown; the peel is capped and collapse-recalled like a flank. Applies to
+// both doctrines (concentration of force is universal).
+function _aiManageMeleeConcentration(state, time) {
+  // Collapse-recall: abandon the concentration if it's been gutted (runs every
+  // tick regardless of the peel cooldown).
+  const cg = _aiState.meleeConcentrateGroup;
+  if (cg && cg.path && cg.path.length) {
+    let hp = 0, maxHp = 0, alive = 0;
+    for (const s of cg.soldiers) {
+      if (!s.alive) continue;
+      hp += s.hp || 0; maxHp += s.maxHp || s.hp || 1; alive++;
+    }
+    if (alive === 0 || (maxHp > 0 && hp / maxHp < 0.35)) cg.path.length = 0;
+  }
+
+  const clinched = state.bMeleeEngagedFrac >= AI_CLINCH_FRAC &&
+                   state.aMeleeEngagedFrac >= AI_CLINCH_FRAC;
+  if (!clinched) return;
+  if ((time - _aiState.lastMeleeConcentrate) < AI_CONCENTRATE_COOLDOWN_MS) return;
+
+  const weak = _aiScanWeakSector();
+  if (!weak.concentrate) return;
+
+  // Gather FREE team-B melee (not engaged/routing/committed). After the clinch
+  // these are the rear ranks not yet in contact — i.e. uncommitted reserves.
+  let totalMelee = 0;
+  const free = [];
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'B' || s.kind !== 'melee') continue;
+    totalMelee++;
+    if (s.isEngaged || s.isRouting || s._moveGroup) continue;
+    free.push(s);
+  }
+  if (free.length < AI_PEEL_MIN) return;
+
+  // Nearest the weak sector first, capped so we never strip more than PEEL_FRAC
+  // of the melee in one peel.
+  free.sort(function(a, b) {
+    return Math.abs(a.container.y - weak.targetY) - Math.abs(b.container.y - weak.targetY);
+  });
+  const cap  = Math.max(AI_PEEL_MIN, Math.floor(totalMelee * AI_PEEL_FRAC));
+  const pick = free.slice(0, cap);
+  if (pick.length < AI_PEEL_MIN) return;
+
+  // Attack-order path: converge on the weak sector at the contact line between
+  // the two melee masses, then charge whatever's nearest on arrival.
+  const contactX = state.aMeleeCount > 0
+    ? Math.round((state.aMx + state.bMx) / 2)
+    : (NO_MAN_X1 - 100);
+  const path = [{
+    x: Math.max(300, Math.min(W - 300, contactX)),
+    y: Math.max(280, Math.min(H - 280, weak.targetY))
+  }];
+  _aiState.meleeConcentrateGroup = _aiAssignMoveGroup(pick, path);
+  _aiState.lastMeleeConcentrate  = time;
+}
+
 // Public entry point: called every frame from update(). Internal throttle
 // keeps the heavy work to once per tacticalTickFrames frames.
 function tickEnemyAI(time) {
@@ -13648,7 +14320,9 @@ function tickEnemyAI(time) {
   _aiState.lastTickFrame = _frameCount;
 
   const state = _aiComputeBattleState(time);
+  _aiState.bMeleeLineX = state.bMeleeCount > 0 ? state.bMx : null;
   _aiManageFlanks(state, time);
+  _aiManageMeleeConcentration(state, time);
 
   // Skirmish doctrine: while the AI's ranged screen forward, the melee line
   // holds. Team B faces left (spawns at x=W), so "behind the melee line" means
@@ -13673,6 +14347,7 @@ function tickEnemyAI(time) {
         state.bSkirmN > 0 && state.bSkirmN < state.aSkirmN &&
         (time - _bSkirmLastHit) < 2500) {
       _aiState.skirmRetreat = true;
+      _aiState.rangedReformBehind = true;  // keep foot archers falling back behind the line even after stand-down
     }
 
     // Stand down once the ranged are back behind the melee line — either after
@@ -13694,6 +14369,19 @@ function tickEnemyAI(time) {
   // when routing/charging/holding (only march is upgraded).
   if (!skirmishB && enemyOrder === 'march' &&
       (time - _bLastArrowHit) < AI_ARCHER_FIRE_WINDOW) {
+    enemyOrder = 'charge';
+  }
+  // After the AI's ranged screen has been forced back (outnumbered) and the
+  // player's arrows are now striking the exposed melee line, the Persian melee
+  // won't stand and soak it: it charges no later than meleeChargeUnderFireSec
+  // after the first such hit. The ranged keep reforming behind the line via
+  // their own latch, so they aren't dragged into the charge. Suppressed while
+  // wavering (the rout override wins).
+  const mcufSec = sm.meleeChargeUnderFireSec || 0;
+  if (mcufSec > 0 && _aiState.meleeFireStart >= 0 &&
+      (time - _aiState.meleeFireStart) >= mcufSec * 1000 &&
+      !(routWarning && routWarningSide === 'B')) {
+    if (skirmishB) skirmishB = false;
     enemyOrder = 'charge';
   }
   // Player AI takeover when general is dead — drives globalOrder via the
@@ -13928,6 +14616,17 @@ function generateAIPlacement(side, counts, techFx) {
     out[kind].forEach(function(stroke) {
       stroke.forEach(function(p) { p.x = Math.min(Math.max(p.x, minX), maxX); });
     });
+    // Terrain clip: the AI's lines END at mountains / edge rivers / deep water
+    // — points inside blocked terrain are dropped (same predicate the player's
+    // draw uses; the placement sampler backstops any interpolation across a
+    // gap). Strokes reduced below 2 points are removed entirely.
+    out[kind] = out[kind]
+      .map(function(stroke) {
+        const kept = stroke.filter(function(p) { return !drawTerrainBlockedAt(p.x, p.y); });
+        if (stroke._subtype) kept._subtype = stroke._subtype;
+        return kept;
+      })
+      .filter(function(stroke) { return stroke.length >= 2; });
   });
 
   return out;
