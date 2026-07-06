@@ -4393,7 +4393,21 @@ function assignMeleeTargets() {
   const teamA_m  = allMelee.filter(u => u.team === 'A');
   const teamB_m  = allMelee.filter(u => u.team === 'B');
 
-  // Clear previous targets
+  // Clear previous targets. Also publish alive-melee counts and centroids per
+  // team (consumed by the chase leash and the reserve close-up in updateMelee).
+  _meleeAlive.A = teamA_m.length;
+  _meleeAlive.B = teamB_m.length;
+  _meleeCentroid.A = null; _meleeCentroid.B = null;
+  if (teamA_m.length) {
+    let x = 0, y = 0;
+    for (const u of teamA_m) { x += u.container.x; y += u.container.y; }
+    _meleeCentroid.A = { x: x / teamA_m.length, y: y / teamA_m.length };
+  }
+  if (teamB_m.length) {
+    let x = 0, y = 0;
+    for (const u of teamB_m) { x += u.container.x; y += u.container.y; }
+    _meleeCentroid.B = { x: x / teamB_m.length, y: y / teamB_m.length };
+  }
   for (const u of allMelee) u._meleePairTarget = null;
 
   // Helper: group units into their drawn chains (by lineChain reference)
@@ -5008,7 +5022,16 @@ function updateMelee(s,nearest,nearDist,allies,dt,time,_hits) {
   }
 
   if (!assignedTarget && nEnemy === 0) {
-    // No chain data or no enemies — just advance on nearest
+    // No chain data — advance on nearest, under the same kind-based leash as
+    // below: don't trek to a distant NON-melee target while enemy melee exist.
+    if (!s.isEngaged && s.lineChain && nearest && nearest.kind !== 'melee' &&
+        _meleeAlive[s.team === 'A' ? 'B' : 'A'] > 0 &&
+        nearDist > MELEE_CHASE_LEASH) {
+      if (!_closeUpToFight(s, allies, dt)) {
+        faceTarget(s, nearest.container.x, nearest.container.y, dt);
+      }
+      return;
+    }
     faceTarget(s, nearest.container.x, nearest.container.y, dt);
     const _adv = advanceSpeedFor(s);
     moveUnit(s, nearest.container.x, nearest.container.y, _adv > 0 ? _adv : baseSpeedFor(s), allies, dt);
@@ -5040,8 +5063,46 @@ function updateMelee(s,nearest,nearDist,allies,dt,time,_hits) {
     // so a friendly engaging at any face of an enemy formation registers as
     // covering the whole footprint — preventing flank stacking.
     const redirected = findUncrowdedTarget(s, moveTarget, FORM_W * 0.9, 200);
-    if (redirected === null) return;
+    if (redirected === null) {
+      // All nearby targets are covered — close toward the crowded target down
+      // to the reserve standoff (instead of halting at arbitrary range), then
+      // hold and let the separation pass keep the pile untangled.
+      const dtt = Math.hypot(moveTarget.container.x - s.container.x,
+                             moveTarget.container.y - s.container.y);
+      const adv = advanceSpeedFor(s);
+      if (dtt > MELEE_RESERVE_STANDOFF && adv > 0) {
+        faceTarget(s, moveTarget.container.x, moveTarget.container.y, dt);
+        moveUnit(s, moveTarget.container.x, moveTarget.container.y, adv, allies, dt);
+      }
+      return;
+    }
     if (redirected !== moveTarget) moveTarget = redirected;
+  }
+
+  // Chase leash — kind-based. Line-vs-line fighting is chasing enemy MELEE,
+  // and is never leashed (closing, re-closing after separation, envelopment
+  // all work at any range). The map-crossing stretch bug was line ends chasing
+  // NON-melee (flanking cavalry riding deep), so only non-melee targets are
+  // leashed: while the enemy still fields melee, a line member walks to a
+  // cavalry/archer/general target only within MELEE_CHASE_LEASH of itself —
+  // otherwise it stands fast in the line (raiders probing within the leash are
+  // still fought). Once the enemy has no melee left the leash lifts entirely,
+  // so the endgame can't stall. Self-anchored, stand-fast: the leash can never
+  // itself reposition or spread a line. Applies to both teams.
+  if (!s.isEngaged && s.lineChain && moveTarget && moveTarget.container &&
+      moveTarget.kind !== 'melee' &&
+      _meleeAlive[s.team === 'A' ? 'B' : 'A'] > 0) {
+    const dts = Math.hypot(moveTarget.container.x - s.container.x,
+                           moveTarget.container.y - s.container.y);
+    if (dts > MELEE_CHASE_LEASH) {
+      // Don't chase — but don't fossilize in place either: close up to the
+      // reserve ring near the fight so surplus melee wait where they can
+      // actually fill gaps.
+      if (!_closeUpToFight(s, allies, dt)) {
+        faceTarget(s, moveTarget.container.x, moveTarget.container.y, dt);
+      }
+      return;
+    }
   }
 
   const tx = moveTarget.container.x, ty = moveTarget.container.y;
@@ -9025,6 +9086,10 @@ function setupInput(scene) {
   // ── Draw (pointer down in draw zone) / Command General ──
   scene.input.on('pointerdown', pointer => {
     if (phase === 'draw' && troopsConfirmed) {
+      // Stale-stroke rescue: if the previous release happened off-canvas, its
+      // pointerup may never have arrived — commit that stroke first so this
+      // press can't overwrite (and silently delete) the drawn line.
+      if (isDrawing) _commitCurrentStroke();
       if (pointer.worldX <= DRAW_MAX_X && drawMode !== null &&
           !drawTerrainBlockedAt(pointer.worldX, pointer.worldY)) {
         // Fully-deployed gate: once every troop of the selected class (or
@@ -9113,21 +9178,28 @@ function setupInput(scene) {
     }
   });
 
+
+// Commit the in-progress draw stroke — shared by pointerup, pointerupoutside,
+// and the stale-stroke rescue in pointerdown. A release outside the canvas can
+// swallow the pointerup; without the rescue, the next pointerdown would reset
+// currentStroke and silently delete the drawn (but uncommitted) line.
+function _commitCurrentStroke() {
+  isDrawing = false;
+  // Accept stroke if length >= 2 (drag), OR if it's a tap in general mode
+  if (currentStroke.length >= 2) {
+    if (drawSubtype) currentStroke._subtype = drawSubtype;
+    getActiveStrokes().push(currentStroke);
+  } else if (currentStroke.length === 1 && drawMode === 'general') {
+    // Single tap in general mode — treat as a point placement
+    getActiveStrokes().push(currentStroke);
+  }
+  currentStroke = [];
+  showPreview(); updateTroopCounts(); checkCanStart();
+  revealBlueLines();
+}
+
   scene.input.on('pointerup', (pointer) => {
-    if (isDrawing) {
-      isDrawing = false;
-      // Accept stroke if length >= 2 (drag), OR if it's a tap in general mode
-      if (currentStroke.length >= 2) {
-        if (drawSubtype) currentStroke._subtype = drawSubtype;
-        getActiveStrokes().push(currentStroke);
-      } else if (currentStroke.length === 1 && drawMode === 'general') {
-        // Single tap in general mode — treat as a point placement
-        getActiveStrokes().push(currentStroke);
-      }
-      currentStroke = [];
-      showPreview(); updateTroopCounts(); checkCanStart();
-      revealBlueLines();
-    }
+    if (isDrawing) _commitCurrentStroke();
     if (isLassoing) {
       isLassoing = false;
       _completeLasso();
@@ -9147,6 +9219,10 @@ function setupInput(scene) {
       redrawCommandPath();
     }
   });
+
+  // A release OUTSIDE the canvas doesn't always deliver 'pointerup' to the
+  // scene — commit the in-progress draw stroke when Phaser reports it.
+  scene.input.on('pointerupoutside', () => { if (isDrawing) _commitCurrentStroke(); });
 
   // ── Pinch zoom (touch) ──
   const canvas = scene.sys.game.canvas;
@@ -13828,6 +13904,31 @@ const AI_WEAK_MIN_UNITS    = 6;     // need at least this many player melee befo
 const AI_PEEL_FRAC         = 0.33;  // #2: max fraction of B melee to peel into a concentration sub-group
 const AI_PEEL_MIN          = 2;     // #2: don't bother peeling fewer than this
 const AI_CONCENTRATE_COOLDOWN_MS = 6000; // #2: min interval between melee weak-sector concentration peels
+const MELEE_CHASE_LEASH = 150; // px: line members only walk to NON-melee targets within this range while enemy melee remain (both teams)
+const MELEE_RESERVE_STANDOFF = 300; // px from the enemy melee centroid where stood-down surplus melee wait, ready to fill gaps
+let _meleeAlive = { A: 0, B: 0 };     // alive melee per team, published by assignMeleeTargets
+let _meleeCentroid = { A: null, B: null }; // melee centroid per team, published by assignMeleeTargets
+
+// Close up toward the fight: a stood-down melee unit under an advancing order
+// moves FORWARD IN ITS OWN LANE (keeps its y) until within the reserve
+// standoff of the enemy melee mass, then stands. Lane-preserving so surplus
+// troops form a coherent second line behind the front instead of funneling
+// into a blob; pairing hands them melee targets as gaps open. Returns true if
+// it moved the unit this frame.
+function _closeUpToFight(s, allies, dt) {
+  const emc = _meleeCentroid[s.team === 'A' ? 'B' : 'A'];
+  if (!emc) return false;
+  const adv = advanceSpeedFor(s);
+  if (adv <= 0) return false;                       // Hold/Fallback: stand
+  const standX = s.team === 'A' ? emc.x - MELEE_RESERVE_STANDOFF
+                                : emc.x + MELEE_RESERVE_STANDOFF;
+  const fwd = s.team === 'A' ? (standX - s.container.x)
+                             : (s.container.x - standX);
+  if (fwd <= 8) return false;                       // already at the reserve ring
+  faceTarget(s, standX, s.container.y, dt);
+  moveUnit(s, standX, s.container.y, adv, allies, dt);
+  return true;
+}
 const AI_SKIRM_RETREAT_BEHIND = 120; // px behind the melee centroid where a duel-losing AI ranged screen re-forms (still in firing range)
 const OPENING_RANGED_MATCH_SPEED = 72; // horse archers advance at this (foot-archer) pace during the opening skirmish, until first shots
 
@@ -14083,23 +14184,74 @@ function _aiUpdateOrderForA(state, time) {
 // Build a 3-waypoint flank path: pull to wing, cross at edge, hook into rear.
 // Player spawn is x<NO_MAN_X1 (left), so flanking enemy crosses at the top
 // or bottom of the map and dives into player territory.
-function _aiBuildFlankPath(side, targetY) {
+// Pick a concrete objective for a flank hook — one of: (a) the END of the
+// player's melee line on this wing, (b) the player's ranged mass behind the
+// line, (c) the player general. Weighted random among whichever exist, for
+// battle-to-battle variety; falls back to a shallow point just behind the
+// player's army centroid (never a fixed deep-map ride).
+const AI_FLANK_OBJ_WEIGHTS = { lineEnd: 0.35, ranged: 0.45, general: 0.20 };
+const AI_FLANK_PASS_CLEAR = 200;  // px beyond the player's line end where the flank lane runs
+function _aiPickFlankObjective(side, state) {
+  const cands = [];
+  let endU = null, gU = null, ax = 0, ay = 0, an = 0;
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active || s.team !== 'A') continue;
+    if (s.kind === 'melee') {
+      if (!endU ||
+          (side === 'top' ? s.container.y < endU.container.y
+                          : s.container.y > endU.container.y)) endU = s;
+    } else if (s.kind === 'archer') { ax += s.container.x; ay += s.container.y; an++; }
+    else if (s.kind === 'general') gU = s;
+  }
+  const endY = endU ? endU.container.y : null;
+  if (endU)   cands.push({ kind:'lineEnd', w: AI_FLANK_OBJ_WEIGHTS.lineEnd, x: endU.container.x, y: endU.container.y });
+  if (an > 0) cands.push({ kind:'ranged',  w: AI_FLANK_OBJ_WEIGHTS.ranged,  x: ax / an,          y: ay / an });
+  if (gU)     cands.push({ kind:'general', w: AI_FLANK_OBJ_WEIGHTS.general, x: gU.container.x,   y: gU.container.y });
+  let pick;
+  if (!cands.length) {
+    pick = { kind:'ranged', x: Math.max(400, state.aMx - 250), y: state.aMy };
+  } else {
+    let tot = 0; for (const c of cands) tot += c.w;
+    let r = Math.random() * tot;
+    for (const c of cands) { r -= c.w; if (r <= 0) { pick = c; break; } }
+    if (!pick) pick = cands[cands.length - 1];
+  }
+  pick.endY = endY;
+  return pick;
+}
+
+function _aiBuildFlankPath(side, target) {
   const isTop  = side === 'top';
-  const safeT  = Math.round(H * 0.15) + 50;   // ≈ 770
-  const safeB  = Math.round(H * 0.85) - 50;   // ≈ 4030
-  const wingY  = isTop ? safeT + 20 : safeB - 20;
-  const crossX = NO_MAN_X1 - 100;             // just inside player territory at the edge
-  const rearX  = 350;                         // deep in player rear
-  // Final hook aims at the weak sector when given one; otherwise the default
-  // rear position for this wing. Clamped to stay on the field.
-  const rearY  = (targetY != null)
-    ? Math.max(280, Math.min(H - 280, targetY))
-    : (isTop ? H / 2 - 100 : H / 2 + 100);
-  return [
-    { x: crossX + 200, y: wingY },            // 1. pull to top/bottom edge while still in own territory
-    { x: crossX,       y: wingY },            // 2. cross at the edge
-    { x: rearX,        y: rearY }             // 3. hook inward toward the weak sector / player rear
+  const safeT  = Math.round(H * 0.15) + 70;   // stay clear of edge terrain bands
+  const safeB  = Math.round(H * 0.85) - 70;
+  // Flank lane: 200px beyond the END of the player's line on this wing — not
+  // the map edge — clamped to the terrain-safe band. A narrow line gets a
+  // tight pass; a line already spanning to the edge gets the old wide lane.
+  let passY;
+  if (target.endY != null) {
+    passY = isTop ? Math.max(safeT, target.endY - AI_FLANK_PASS_CLEAR)
+                  : Math.min(safeB, target.endY + AI_FLANK_PASS_CLEAR);
+  } else {
+    passY = isTop ? safeT : safeB;
+  }
+  const crossX = NO_MAN_X1 - 100;             // just inside player territory
+  const tx = Math.max(300, Math.min(crossX - 150, target.x));
+  const ty = Math.max(280, Math.min(H - 280, target.y));
+  const path = [
+    { x: crossX + 200, y: passY },            // 1. pull to the lane while still in own territory
+    { x: crossX,       y: passY }             // 2. cross beside the line end
   ];
+  if (target.kind === 'lineEnd') {
+    path.push({ x: tx, y: ty });              // 3. turn directly onto the line end
+  } else {
+    // Ranged / general (behind the line): ride the lane AROUND the line until
+    // roughly level with the objective's depth, then turn in — instead of
+    // cutting a diagonal through the line's end.
+    const hookX = Math.max(300, Math.min(crossX - 100, tx));
+    if (hookX < crossX - 120) path.push({ x: hookX, y: passY });
+    path.push({ x: tx, y: ty });
+  }
+  return path;
 }
 
 // Attach a fresh _moveGroup with the given path to a list of soldiers.
@@ -14170,15 +14322,14 @@ function _aiManageFlanks(state, time) {
       if (hpOk && allCav.length >= AI_CAV_TASK_MIN) {
         const weak = _aiScanWeakSector();
         if (flanking.defaultActive) {
-          // Persian double envelopment (each wing that has free cavalry). The
-          // weak-side wing hooks at the weak sector; the other runs its default.
+          // Persian double envelopment (each wing that has free cavalry).
+          // Each wing hooks onto a concrete objective — the wing-side line
+          // end, the ranged mass, or the general — picked independently.
           if (topCav.length) {
-            const ty = (weak.concentrate && weak.weakSide === 'top') ? weak.targetY : null;
-            _aiState.flankGroups.top = _aiAssignMoveGroup(topCav, _aiBuildFlankPath('top', ty));
+            _aiState.flankGroups.top = _aiAssignMoveGroup(topCav, _aiBuildFlankPath('top', _aiPickFlankObjective('top', state)));
           }
           if (botCav.length) {
-            const ty = (weak.concentrate && weak.weakSide === 'bottom') ? weak.targetY : null;
-            _aiState.flankGroups.bottom = _aiAssignMoveGroup(botCav, _aiBuildFlankPath('bottom', ty));
+            _aiState.flankGroups.bottom = _aiAssignMoveGroup(botCav, _aiBuildFlankPath('bottom', _aiPickFlankObjective('bottom', state)));
           }
           _aiState.cavTasked = true;
           _aiState.lastCavTask = time;
@@ -14197,8 +14348,7 @@ function _aiManageFlanks(state, time) {
               return side === 'top' ? s.container.y < H/2 - 50 : s.container.y > H/2 + 50;
             });
             const pick = wingCav.length > 0 ? wingCav : allCav;
-            const ty = (weak.concentrate && side === weak.weakSide) ? weak.targetY : null;
-            _aiState.flankGroups[side] = _aiAssignMoveGroup(pick, _aiBuildFlankPath(side, ty));
+            _aiState.flankGroups[side] = _aiAssignMoveGroup(pick, _aiBuildFlankPath(side, _aiPickFlankObjective(side, state)));
             _aiState.cavTasked = true;
             _aiState.lastCavTask = time;
           }

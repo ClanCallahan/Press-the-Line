@@ -1342,6 +1342,9 @@ function troopIconSVG(sub, px) {
           });
         });
       }
+      // Remove any formation left below one whole soldier by the battle, and
+      // reflect it in the casualty report so the popup stays consistent.
+      pruneSubSoldierFormations(_army, pendingCasualties);
     })();
     sessionStorage.setItem('armies', JSON.stringify(armies));
   }
@@ -2655,17 +2658,18 @@ function troopIconSVG(sub, px) {
   window.renderRoutes = renderRoutes;
   function startArmyMoveToCity(armyIdx, destCityName, destLat, destLon) {
     var a = armies[armyIdx];
-    if (!a) return;
+    if (!a) return false;
     if (a.musterId) detachLevyFromMuster(a); // redirected away from its muster
     var fromKey = nearestNodeKey(a.lat, a.lon);
     var toKey   = destLat+','+destLon;
     // Snap toKey if not in adjacency
     if (!adjacency[toKey]) toKey = nearestNodeKey(destLat, destLon);
     var pathKeys = findArmyPathKeys(fromKey, toKey);
-    if (!pathKeys) return;
+    if (!pathKeys) return false;
     var waypoints = keysToWaypoints(pathKeys);
     a.moving = true;
     a.movePath = waypoints;
+    a.moveCityKeys = pathKeys.slice(); // node-key list (cities + junctions) for revolt-blocking
     a.moveWpIdx = 0;
     a.moveSegProg = 0;
     a.moveDestCityName = destCityName;
@@ -2676,12 +2680,14 @@ function troopIconSVG(sub, px) {
     sessionStorage.setItem('armies', JSON.stringify(armies));
     renderArmies();
     renderRoutes();
+    return true;
   }
 
   // Start an army moving toward another army's city (merge on arrival)
   function startArmyAttackMarch(armyIdx, cityName, cityLat, cityLon, cityMapType) {
     var a = armies[armyIdx];
     if (!a) return;
+    a.needsReplenishReport = false; // redirected into an attack — cancels the arrival replenish report
     if (a.musterId) detachLevyFromMuster(a); // redirected away from its muster
     // Record where this army set out from, so a Retreat at the gates can march it back.
     a.attackOriginCity = a.cityName || null;
@@ -2695,6 +2701,7 @@ function troopIconSVG(sub, px) {
     var waypoints = keysToWaypoints(pathKeys);
     a.moving = true;
     a.movePath = waypoints;
+    a.moveCityKeys = pathKeys.slice(); // node-key list (cities + junctions) for revolt-blocking
     a.moveWpIdx = 0;
     a.moveSegProg = 0;
     a.moveDestCityName = cityName;
@@ -2956,6 +2963,7 @@ function troopIconSVG(sub, px) {
         if (a.moveDestCityName) a.cityName = a.moveDestCityName;
         a.moving = false;
         a.movePath = null;
+        a.moveCityKeys = null;
         a.moveWpIdx = 0;
         a.moveSegProg = 0;
 
@@ -3013,11 +3021,33 @@ function troopIconSVG(sub, px) {
           renderArmies();
           return; // halt this tick; the panel owns what happens next
         } else {
-          // Plain move order complete — center, announce, and pause.
+          // Plain move order complete.
           if (window.isTimeRunning && window.isTimeRunning()) window.toggleTime();
           sessionStorage.setItem('armies', JSON.stringify(armies));
           renderArmies();
           renderRoutes();
+          // A retreated/field-survivor army flagged for a post-battle replenish
+          // report: if it's now at a friendly city and under strength, show the
+          // replenish panel with a note; otherwise clear the flag silently.
+          if (a.needsReplenishReport) {
+            a.needsReplenishReport = false;
+            var _atFriendly = a.cityName && isPlayerCity(CITY_COORDS[a.cityName], a.cityName);
+            var _damaged = false;
+            if (a.xp) {
+              Object.keys(a.xp).forEach(function(sub) {
+                var mh = unitMaxHp(sub, playerSide);
+                (a.xp[sub] || []).forEach(function(e){
+                  if ((e.hpRem != null ? e.hpRem : (e.hpCap||mh)) < (e.hpCap != null ? e.hpCap : mh)) _damaged = true;
+                });
+              });
+            }
+            if (_atFriendly && _damaged) {
+              sessionStorage.setItem('armies', JSON.stringify(armies));
+              var _zeroCas = { melee:{died:0}, archer:{died:0}, cavalry:{died:0} };
+              showReplenishPanel(_zeroCas, i, true); // true → arrived-at-friendly-city note
+              return; // panel owns what happens next
+            }
+          }
           window.showOrderCompletePopup(a, 'move');
           return; // halt this tick; the popup owns what happens next
         }
@@ -3194,7 +3224,26 @@ function troopIconSVG(sub, px) {
     return Math.round(total);
   }
 
-  // ── Attack/defense briefing force math ──────────────────────────────────────
+  // Per-class soldier counts {melee, archer, cavalry}, hp-pro-rated like
+  // armySoldiers(). Used to compute battle losses by class (before vs after).
+  function armySoldiersByClass(a) {
+    var out = { melee:0, archer:0, cavalry:0 };
+    if (!a || !a.xp) return out;
+    Object.keys(a.xp).forEach(function(sub) {
+      var st = UNIT_STATS[sub]; if (!st) return;
+      var cls = st.class; if (out[cls] == null) return;
+      var maxHp = unitMaxHp(sub, playerSide);
+      var pc    = popCostOf(sub);
+      (a.xp[sub] || []).forEach(function(e){
+        var hpRem = (e.hpRem != null) ? e.hpRem : maxHp;
+        out[cls] += pc * (hpRem / maxHp);
+      });
+    });
+    out.melee = Math.round(out.melee);
+    out.archer = Math.round(out.archer);
+    out.cavalry = Math.round(out.cavalry);
+    return out;
+  }
   // Soldier count and "strength" for a force, both population-based per troop
   // type (popCostOf) and HP-scaled per formation, mirroring armySoldiers(). A
   // mercenary inherits its base troop's soldier count via popCostOf (population
@@ -3383,13 +3432,16 @@ function troopIconSVG(sub, px) {
   }
   // Apply a battle formation report to an army object (player or enemy).
   // sideReport is keyed by subtype: { hoplite: [...], toxotai: [...], ... }
-  function applyFormationReport(army, sideReport) {
+  // If casAccum ({melee:{died},archer:{died},cavalry:{died}}) is passed, deaths
+  // (both battle-dead and sub-1-soldier pruned) increment it for reporting.
+  function applyFormationReport(army, sideReport, casAccum) {
     if (!army || !sideReport) return;
     army.troops = army.troops || {};
     army.xp     = army.xp || {};
     Object.keys(sideReport).forEach(function(sub) {
       var reps = sideReport[sub] || [];
       if (!reps.length) return;
+      var st = UNIT_STATS[sub];
       var xpArr = army.xp[sub] || [];
       var byId = {};
       xpArr.forEach(function(e) { byId[e.id] = e; });
@@ -3402,11 +3454,17 @@ function troopIconSVG(sub, px) {
           if (r.hpRem != null) byId[r.id].hpRem = r.hpRem;
         }
       });
-      army.xp[sub] = xpArr.filter(function(e) { return !e.id || !deadIds[e.id]; });
+      army.xp[sub] = xpArr.filter(function(e) {
+        var dead = (e.id && deadIds[e.id]);
+        if (dead && casAccum && st && casAccum[st.class]) casAccum[st.class].died++;
+        return !e.id || !deadIds[e.id];
+      });
       // Troop count = number of remaining xp entries
       army.troops[sub] = army.xp[sub].length;
       if (army.troops[sub] === 0) { delete army.troops[sub]; delete army.xp[sub]; }
     });
+    // Remove survivors reduced below one whole soldier (reflected in casAccum).
+    pruneSubSoldierFormations(army, casAccum);
   }
 
   // ── City icon ─────────────────────────────────────────────────────────────
@@ -4448,13 +4506,13 @@ function troopIconSVG(sub, px) {
         : '';
       var _isAttackMarch = a.moving && a.moveAttackMapType != null;
       var _marchNote = _isAttackMarch
-        ? '<br><em style="color:#ff6633;font-size:10px;">⚔ Marching to attack '+a.moveDestCityName+'</em>'
+        ? '<br><em style="color:#ff6633;font-size:10px;">⚔ Marching to attack '+cityDisplayName(a.moveDestCityName)+'</em>'
         : (a.moving && a.moveDestCityName
-          ? '<br><em style="color:#c9a84c;font-size:10px;">Marching to '+a.moveDestCityName+'</em>'
+          ? '<br><em style="color:#c9a84c;font-size:10px;">Marching to '+cityDisplayName(a.moveDestCityName)+'</em>'
           : '');
-      var _titleSuffix = (a.moving && a.moveDestCityName) ? ' \u2192 '+a.moveDestCityName : '';
+      var _titleSuffix = (a.moving && a.moveDestCityName) ? ' \u2192 '+cityDisplayName(a.moveDestCityName) : '';
       var m = L.marker([dp.lat, dp.lon], {icon:icon, zIndexOffset:-100})
-        .bindPopup('<div class="pname pg" style="font-size:14px;">Army at '+a.cityName+_titleSuffix+'</div>'
+        .bindPopup('<div class="pname pg" style="font-size:14px;">Army at '+(cityDisplayName(a.cityName)||'the field')+_titleSuffix+'</div>'
           +'<div class="psub">'+lines.join('<br>')+_marchNote+'</div>'
           +supplyBadge
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">'
@@ -5044,10 +5102,19 @@ function troopIconSVG(sub, px) {
 
   function getEffectiveCityPop(name) {
     var base = CITY_POPS[name] || 0;
-    var pop  = slavedCities.indexOf(name) >= 0
+    // Enslaved AND erased cities are both reduced to 10% of their base
+    // population. Enslave redistributes the other 90% (see popBonuses);
+    // erase puts them to the sword — no redistribution.
+    var razed = slavedCities.indexOf(name) >= 0 || erasedCities.hasOwnProperty(name);
+    var pop  = razed
       ? Math.round(base * 0.1)
       : (base + (popBonuses[name] || 0));
     return Math.max(0, pop - (cityPopReductions[name] || 0));
+  }
+
+  // Display name for a city — erased-and-colonized cities show their new name.
+  function cityDisplayName(name) {
+    return (name && erasedCities.hasOwnProperty(name)) ? erasedCities[name].newName : name;
   }
 
   window.openArmyPanel = function(cityName, lat, lon) {
@@ -5526,7 +5593,7 @@ function troopIconSVG(sub, px) {
   // scaled by each formation's HP-loss fraction. See inspectReplenish for the
   // matching logic on the inspect-panel flow.
 
-  function showReplenishPanel(cas, armyIdx) {
+  function showReplenishPanel(cas, armyIdx, arrivedNote) {
     var army     = armies[armyIdx];
     var cityName = army ? army.cityName : '';
     var cityPop  = getEffectiveCityPop(cityName);
@@ -5585,6 +5652,11 @@ function troopIconSVG(sub, px) {
     if (!p) return;
 
     document.getElementById('rep-army-city').textContent = cityName || 'Unknown';
+    var _noteEl = document.getElementById('rep-arrived-note');
+    if (_noteEl) {
+      if (arrivedNote) { _noteEl.textContent = 'Your army arrived in a friendly city, consider replenishing it.'; _noteEl.style.display = 'block'; }
+      else _noteEl.style.display = 'none';
+    }
 
     // Casualty rows — one class header per class, then one row per damaged
     // formation with a per-formation replenish button.
@@ -5621,7 +5693,7 @@ function troopIconSVG(sub, px) {
       casHtml += '<div class="rep-row">'
         +'<span class="rep-label">'+classIcon[cls]+' '+classLabel[cls]+'</span>'
         +'<span class="rep-val">'
-          +diedTotal+' lost &nbsp;·&nbsp; '+fmt(hpLostTotal)+' soldiers'
+          +diedTotal+' '+(diedTotal===1?'formation':'formations')+' lost &nbsp;·&nbsp; replenish '+fmt(hpLostTotal)+' soldiers'
         +'</span>'
         +'</div>';
 
@@ -5632,7 +5704,7 @@ function troopIconSVG(sub, px) {
         casHtml += '<div class="rep-row" style="padding-left:24px;padding-top:2px;padding-bottom:2px;font-size:10px;">'
           +'<span class="rep-label" style="font-size:10px;color:#9a8050;">'+f.st.label+'</span>'
           +'<span class="rep-val" style="display:flex;align-items:center;gap:6px;">'
-            +'<span style="color:'+fCol+';font-size:10px;">'+Math.round(f.hpRem)+'/'+Math.round(f.hpCap)+' hp</span>'
+            +'<span style="color:'+fCol+';font-size:10px;">'+Math.round(f.hpRem)+'/'+Math.round(f.hpCap)+' soldiers</span>'
             +'<button class="rep-one-btn" onclick="replenishOneFormation('+armyIdx+',\''+f.sub+'\','+f.fi+',\'replenish\')" title="Replenish this formation">➕</button>'
           +'</span>'
         +'</div>';
@@ -5642,15 +5714,22 @@ function troopIconSVG(sub, px) {
     if (!casHtml) casHtml = '<div style="color:#887755;font-style:italic;font-size:12px;">No casualties recorded.</div>';
     document.getElementById('rep-cas-rows').innerHTML = casHtml;
 
-    document.getElementById('rep-total-cost').textContent = fmt(totalCost);
-    document.getElementById('rep-city-pop').textContent   = fmt(cityPop);
-    var netEl = document.getElementById('rep-net-pop');
-    netEl.textContent  = fmt(netPop);
-    netEl.style.color  = netPop < 0 ? '#ff6644' : '#88ee88';
-    var armsEl = document.getElementById('rep-arms-cost');
-    if (armsEl) { armsEl.textContent = fmt(armsCost); armsEl.style.color = armsCost > armsStock ? '#ff6644' : '#88ee88'; }
-    var goldEl = document.getElementById('rep-gold-cost');
-    if (goldEl) { goldEl.textContent = fmt(salaryCost); goldEl.style.color = salaryCost > treasury ? '#ff6644' : '#88ee88'; }
+    // Cost table — rows: Current Total / Required / After Replenish;
+    // columns: City Pop. / Gold / Arms. Bad numbers show red.
+    function _repCell(id, v, bad) {
+      var el = document.getElementById(id); if (!el) return;
+      el.textContent = fmt(v);
+      if (bad !== undefined) el.style.color = bad ? '#ff6644' : '#88ee88';
+    }
+    _repCell('rep-cur-pop',  cityPop);
+    _repCell('rep-cur-gold', treasury, treasury < 0);
+    _repCell('rep-cur-arms', armsStock);
+    _repCell('rep-req-pop',  totalCost,  totalCost  > cityPop);
+    _repCell('rep-req-gold', salaryCost, salaryCost > treasury);
+    _repCell('rep-req-arms', armsCost,   armsCost   > armsStock);
+    _repCell('rep-after-pop',  netPop,               netPop < 0);
+    _repCell('rep-after-gold', treasury - salaryCost, treasury - salaryCost < 0);
+    _repCell('rep-after-arms', armsStock - armsCost,  armsStock - armsCost  < 0);
 
     // Store for doReplenish
     p.dataset.armyIdx   = armyIdx;
@@ -7435,16 +7514,118 @@ function troopIconSVG(sub, px) {
     return Math.floor(totalPop * calcBirthRate(taxRate, side) / 100);
   }
 
+  // Salary is pro-rated by soldier count: each formation bills
+  // goldCost × (hpRem / hpCap), so a battle-damaged or partially-deserted
+  // formation costs proportionally less. Applies to both player and enemy.
   function calcArmySalary() {
     var salary = 0;
-    armies.forEach(function(a) {
-      if (!a.troops) return;
+    armies.forEach(function(a) { salary += armySalaryOf(a); });
+    return salary;
+  }
+  // Pro-rated salary for a single army (used by player and, in mirror form,
+  // by the AI economy).
+  function armySalaryOf(a) {
+    if (!a) return 0;
+    var s = 0;
+    if (a.xp) {
+      Object.keys(a.xp).forEach(function(sub) {
+        var st = UNIT_STATS[sub]; if (!st) return;
+        var maxHp = unitMaxHp(sub, playerSide) || 1;
+        (a.xp[sub] || []).forEach(function(e) {
+          var hpRem = (e.hpRem != null) ? e.hpRem : maxHp;
+          s += (st.goldCost || 0) * (hpRem / maxHp);
+        });
+      });
+    } else if (a.troops) { // fallback: no xp detail → full rate
       Object.keys(a.troops).forEach(function(sub) {
-        var st = UNIT_STATS[sub];
-        if (st) salary += (a.troops[sub] || 0) * (st.goldCost || 0);
+        var st = UNIT_STATS[sub]; if (st) s += (a.troops[sub] || 0) * (st.goldCost || 0);
+      });
+    }
+    return s;
+  }
+  // Pro-rated salary of only the FLAGGED (unpaid) formations — the denominator
+  // for the desertion fraction.
+  function flaggedSalaryBill() {
+    var s = 0;
+    armies.forEach(function(a) {
+      if (!a || !a.xp) return;
+      Object.keys(a.xp).forEach(function(sub) {
+        var st = UNIT_STATS[sub]; if (!st) return;
+        var maxHp = unitMaxHp(sub, playerSide) || 1;
+        (a.xp[sub] || []).forEach(function(e) {
+          if (!e.unpaid) return;
+          var hpRem = (e.hpRem != null) ? e.hpRem : maxHp;
+          s += (st.goldCost || 0) * (hpRem / maxHp);
+        });
       });
     });
-    return salary;
+    return s;
+  }
+
+  // ── Unpaid-salary desertion (Model 2) ───────────────────────────────────────
+  // Drain fraction `f` of each FLAGGED formation's remaining soldiers (hpRem).
+  // Formations reduced to 0 are removed; survivors keep their reduced strength
+  // and remain replenishable. Returns total soldiers (hp) lost.
+  function applyDesertion(f) {
+    if (!(f > 0)) return 0;
+    var lost = 0;
+    armies.forEach(function(a) {
+      if (!a || !a.xp) return;
+      Object.keys(a.xp).forEach(function(sub) {
+        (a.xp[sub] || []).forEach(function(e) {
+          if (!e.unpaid) return;
+          var cur = (e.hpRem != null) ? e.hpRem : 0;
+          var drain = f * cur;
+          e.hpRem = Math.max(0, cur - drain);
+          lost += (cur - e.hpRem);
+        });
+      });
+    });
+    // Remove formations reduced below one whole soldier; keep counts in sync.
+    armies.forEach(function(a) { pruneSubSoldierFormations(a, null); });
+    for (var i = armies.length - 1; i >= 0; i--) {
+      if (troopsTotal(armies[i].troops) === 0) armies.splice(i, 1);
+    }
+    return Math.round(lost);
+  }
+  // Flag / unflag every current formation as unpaid.
+  function setUnpaidFlag(val) {
+    armies.forEach(function(a) {
+      if (!a || !a.xp) return;
+      Object.keys(a.xp).forEach(function(sub) {
+        (a.xp[sub] || []).forEach(function(e) { e.unpaid = val ? true : false; });
+      });
+    });
+  }
+
+  // Remove any formation reduced below one whole soldier's worth of strength
+  // (from desertion, battle, or any cause). Soldiers in a formation =
+  // popCostOf(sub) × (hpRem/maxHp), so "< 1 soldier" ⇔ hpRem < maxHp/popCost.
+  // Keeps troops[sub] in sync with xp[sub].length. If a `casAccum` object
+  // ({melee:{died},archer:{died},cavalry:{died}}) is passed, each pruned
+  // formation increments its class's died count so casualty reports stay
+  // consistent. Returns total formations pruned.
+  function pruneSubSoldierFormations(army, casAccum) {
+    if (!army || !army.xp) return 0;
+    var pruned = 0;
+    var side = (army.side && army.side !== playerSide) ? army.side : playerSide;
+    Object.keys(army.xp).forEach(function(sub) {
+      var st = UNIT_STATS[sub];
+      var maxHp = unitMaxHp(sub, side) || 1;
+      var pc = popCostOf(sub) || 1;
+      var minHp = maxHp / pc; // hp equal to exactly one soldier
+      var kept = [];
+      (army.xp[sub] || []).forEach(function(e) {
+        var hpRem = (e.hpRem != null) ? e.hpRem : maxHp;
+        if (hpRem < minHp - 1e-9) {
+          pruned++;
+          if (casAccum && st && casAccum[st.class]) casAccum[st.class].died++;
+        } else kept.push(e);
+      });
+      if (kept.length === 0) { delete army.xp[sub]; if (army.troops) delete army.troops[sub]; }
+      else { army.xp[sub] = kept; if (army.troops) army.troops[sub] = kept.length; }
+    });
+    return pruned;
   }
 
   function refreshEmpirePanel() {
@@ -7492,6 +7673,14 @@ function troopIconSVG(sub, px) {
       nextEl.textContent = nextTreasury.toLocaleString() + ' gold';
       nextEl.style.color = nextTreasury < treasury ? '#ff7755' : '#44ee88';
     }
+    var trChange = income - salary;
+    var chEl = document.getElementById('emp-treasury-change');
+    if (chEl) {
+      chEl.textContent = (trChange >= 0 ? '+' : '') + trChange.toLocaleString();
+      chEl.style.color = trChange >= 0 ? '#44ee88' : '#ff7755';
+    }
+    var popNextEl = document.getElementById('emp-pop-next');
+    if (popNextEl) popNextEl.textContent = (stats.totalPop + popGrow).toLocaleString();
     var listEl = document.getElementById('emp-blacksmith-list');
     listEl.innerHTML = '';
     stats.blacksmithCities.forEach(function(c) {
@@ -7661,7 +7850,8 @@ function troopIconSVG(sub, px) {
     function troopRow(sub) {
       var g = agg[sub], st = UNIT_STATS[sub];
       var soldiers = popCostOf(sub) * (g.rem / g.maxHp);
-      var salary   = g.formations * (st.goldCost || 0);
+      // Salary is pro-rated by soldier count: goldCost × (remaining ÷ full-strength).
+      var salary   = Math.round((st.goldCost || 0) * (g.rem / (g.formations * g.maxHp)));
       var prefix   = isMercSub(sub) ? (classIcons[st.class] + ' ') : '';
       return '<div class="emp-mil-row">'
         + '<div class="emp-mil-left">'
@@ -7736,8 +7926,8 @@ function troopIconSVG(sub, px) {
       var apct = cap > 0 ? Math.round(rem / cap * 100) : 0;
       var acol = apct >= 66 ? '#4a9a44' : apct >= 33 ? '#c9a84c' : '#cc3311';
       var status = a.moving
-        ? ('Marching' + (a.moveDestCityName ? (' → ' + a.moveDestCityName) : ''))
-        : ('Stationed at ' + (a.cityName || '—'));
+        ? ('Marching' + (a.moveDestCityName ? (' → ' + cityDisplayName(a.moveDestCityName)) : ''))
+        : ('Stationed at ' + (cityDisplayName(a.cityName) || '—'));
       var statusIcon = a.moving ? '🚶' : '📍';
       var supWord = (supplyStatus[idx] === 'starving')
         ? '<span style="color:#ff5555;font-weight:700;">Starving</span>'
@@ -7778,6 +7968,14 @@ function troopIconSVG(sub, px) {
       nextEl.textContent = nextTreasury.toLocaleString() + ' gold';
       nextEl.style.color = nextTreasury < treasury ? '#ff7755' : '#44ee88';
     }
+    var trChange = income - salary;
+    var chEl = document.getElementById('emp-treasury-change');
+    if (chEl) {
+      chEl.textContent = (trChange >= 0 ? '+' : '') + trChange.toLocaleString();
+      chEl.style.color = trChange >= 0 ? '#44ee88' : '#ff7755';
+    }
+    var popNextEl = document.getElementById('emp-pop-next');
+    if (popNextEl) popNextEl.textContent = (stats.totalPop + popGrow).toLocaleString();
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -7990,14 +8188,25 @@ function troopIconSVG(sub, px) {
     var income = Math.floor(totalPop * 3 * (AI_TAX_RATE / 100) * (1 + aiFx.incomePct / 100)) + aiFx.incomeFlat;
     var salary = 0;
     enemyArmies.forEach(function(a) {
-      // Salary uses per-variant gold cost directly
-      if (a.troops) {
+      // Salary is pro-rated by soldier count (hpRem/hpCap), mirroring the
+      // player economy: damaged formations cost proportionally less.
+      if (a.xp) {
+        Object.keys(a.xp).forEach(function(sub) {
+          var st = UNIT_STATS[sub]; if (!st) return;
+          var maxHp = unitMaxHp(sub, aiSide) || 1;
+          (a.xp[sub] || []).forEach(function(e) {
+            var hpRem = (e.hpRem != null) ? e.hpRem : maxHp;
+            salary += (st.goldCost || 0) * (hpRem / maxHp);
+          });
+        });
+      } else if (a.troops) {
         Object.keys(a.troops).forEach(function(sub) {
           var st = UNIT_STATS[sub];
           if (st) salary += (a.troops[sub] || 0) * (st.goldCost || 0);
         });
       }
     });
+    salary = Math.round(salary);
     return { income:income, salary:salary, armsProduction:totalArmsProduction };
   }
 
@@ -8999,6 +9208,268 @@ function troopIconSVG(sub, px) {
     }
   }
 
+  // ── Block marches through a newly-neutral city ────────────────────────────
+  // Pathfinding already refuses to route through neutral ('N') cities, but a
+  // path computed BEFORE a revolt is a frozen waypoint list that the movement
+  // ticks walk blindly — so armies could still march straight through the
+  // city. Called when a city flips to neutral: any army (player or enemy)
+  // whose REMAINING path passes through that city is re-routed around it if
+  // possible, otherwise halted at the last node before the city.
+  // Exceptions: player armies destined FOR the city are rerouteArmiesFromCity's
+  // job; AI suppression armies whose strikeTarget IS the city may finish their
+  // march to reclaim it.
+  var _marchBlockedQueue = []; // filled by blockMarchesThroughCity, drained after the NY report
+
+  function blockMarchesThroughCity(cityName) {
+    var key = CITY_COORDS[cityName];
+    if (!key) return;
+    var kp = key.split(','), cLat = parseFloat(kp[0]), cLon = parseFloat(kp[1]);
+    var playerFaction = playerSide === 'greece' ? 'G' : 'P';
+
+    function findHit(movePath, fromIdx) {
+      for (var i = fromIdx; i < movePath.length; i++) {
+        if (Math.abs(movePath[i][0] - cLat) < 0.01 && Math.abs(movePath[i][1] - cLon) < 0.01) return i;
+      }
+      return -1;
+    }
+
+    // ── Player armies (tickArmies system: moving/moveWpIdx/moveSegProg) ──
+    // A player army whose remaining route runs through the newly-neutral city
+    // is halted and re-homed, then a consolidated popup tells the player to
+    // reissue orders. Landing city is chosen from moveCityKeys (the node-key
+    // list captured at order time): the first FRIENDLY city ahead before the
+    // block; failing that, the nearest friendly city BEHIND them on the route
+    // (their most-recently-departed city / origin); failing that, halt in place.
+    var changedP = false;
+    var blocked = []; // {army, landedName} for the popup
+
+    // Which key index is the army currently at / just past? Match its live
+    // position to the nearest node in moveCityKeys.
+    function currentKeyIdx(a) {
+      if (!a.moveCityKeys || !a.moveCityKeys.length) return -1;
+      var best = 0, bestD = Infinity;
+      for (var i = 0; i < a.moveCityKeys.length; i++) {
+        var p = a.moveCityKeys[i].split(',');
+        var d = Math.hypot(a.lat - parseFloat(p[0]), a.lon - parseFloat(p[1]));
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best;
+    }
+    // Is this node key a friendly city? Return its registry entry or null.
+    function friendlyCityAtKey(k) {
+      if (factionLookup[k] !== playerFaction) return null;
+      for (var i = 0; i < cityMarkerRegistry.length; i++) {
+        var reg = cityMarkerRegistry[i];
+        if ((reg.lat + ',' + reg.lon) === k) return reg;
+      }
+      return null;
+    }
+
+    armies.forEach(function(a) {
+      if (!a.moving || !a.movePath || a.movePath.length < 2) return;
+      if (a.moveDestCityName === cityName) return; // destined FOR it: rerouteArmiesFromCity's job
+      // Does the remaining GEOMETRY path pass through the city?
+      if (findHit(a.movePath, (a.moveWpIdx || 0) + 1) < 0) return;
+
+      var landed = null; // registry entry we re-home to, or null = halt in place
+
+      if (a.moveCityKeys && a.moveCityKeys.length) {
+        var curIdx = currentKeyIdx(a);
+        // Find the neutral city's index in the key list
+        var neutralIdx = -1;
+        for (var i = 0; i < a.moveCityKeys.length; i++) {
+          if (a.moveCityKeys[i] === key) { neutralIdx = i; break; }
+        }
+        if (neutralIdx >= 0) {
+          // Forward: first friendly city strictly before the neutral one
+          for (var f = curIdx + 1; f < neutralIdx && !landed; f++) {
+            landed = friendlyCityAtKey(a.moveCityKeys[f]);
+          }
+          // Backward: nearest friendly city at or behind current position
+          if (!landed) {
+            for (var b = Math.min(curIdx, neutralIdx - 1); b >= 0 && !landed; b--) {
+              landed = friendlyCityAtKey(a.moveCityKeys[b]);
+            }
+          }
+        }
+      }
+
+      // Halt the march
+      a.moving = false;
+      a.movePath = null;
+      a.moveCityKeys = null;
+      a.moveWpIdx = 0;
+      a.moveSegProg = 0;
+      a.moveDestCityName = null; a.moveDestLat = null; a.moveDestLon = null;
+      a.moveDestArmyIdx = null; a.moveAttackMapType = null;
+      a.attackOriginCity = null; a.attackOriginLat = null; a.attackOriginLon = null;
+
+      if (landed) {
+        a.lat = landed.lat; a.lon = landed.lon; a.cityName = landed.name;
+      }
+      // else: army stays at its current field position (halt in place)
+
+      blocked.push({ army: a });
+      changedP = true;
+    });
+
+    if (changedP) {
+      sessionStorage.setItem('armies', JSON.stringify(armies));
+      if (typeof renderArmies === 'function') renderArmies();
+      if (typeof window.renderRoutes === 'function') window.renderRoutes();
+      // Accumulate for a single consolidated popup shown after the New Year
+      // report (multiple cities can revolt in one year).
+      _marchBlockedQueue.push({ city: cityDisplayName(cityName), armies: blocked });
+    }
+
+    // ── Enemy armies (tickEnemyMovement system: moveAction/moveSegIdx/moveFrac) ──
+    var changedE = false;
+    enemyArmies.forEach(function(a) {
+      if (!a.moveAction || !a.movePath || a.movePath.length < 2) return;
+      var last = a.movePath.length - 1;
+      var cur = (a.moveSegIdx || 0);
+      var hit = findHit(a.movePath, cur + 1);
+      if (hit < 0) return;
+      // Suppression army sent to reclaim this exact city — let it arrive.
+      if (hit === last && a.strikeTarget === key) return;
+      if (hit <= cur + 1) {
+        // At the city's edge — halt in place; the AI re-tasks idle armies.
+        a.movePath = null; a.moveSegIdx = 0; a.moveFrac = 0; a.moveAction = null;
+      } else {
+        a.movePath.length = hit; // truncate: halt at the last node before the city
+      }
+      // A strikeTarget on the far side is now unreachable via this route; clear
+      // it so the idle-army trigger can't launch a teleport attack from afar.
+      if (a.strikeTarget !== key) a.strikeTarget = null;
+      changedE = true;
+    });
+    if (changedE) {
+      sessionStorage.setItem('enemyArmies', JSON.stringify(enemyArmies));
+      if (typeof renderEnemyArmies === 'function') renderEnemyArmies();
+    }
+  }
+
+  // Consolidated "march blocked by revolt" popup. Drains _marchBlockedQueue,
+  // centers on one blocked army, lists the rest. Player-only; generic wording
+  // (no destination/landing city named) so it fits halt-in-place cases too.
+  // Returns true if a popup was shown, false if nothing was queued.
+  window.showMarchBlockedPopup = function() {
+    if (!_marchBlockedQueue.length) return false;
+    var all = [];
+    _marchBlockedQueue.forEach(function(entry) {
+      entry.armies.forEach(function(b){ all.push(b.army); });
+    });
+    _marchBlockedQueue.length = 0;
+    if (!all.length) return false;
+
+    var panel = document.getElementById('march-blocked-panel');
+    var body  = document.getElementById('march-blocked-body');
+    if (!panel || !body) return false;
+
+    // Center on the first blocked army.
+    var first = all[0];
+    if (first && first.lat != null && first.lon != null) {
+      try { map.setView([first.lat, first.lon], map.getZoom(), { animate: true }); } catch (e) {}
+    }
+
+    var lines = all.map(function(a) {
+      var where = a.cityName ? cityDisplayName(a.cityName) : 'the field';
+      var size  = troopsTotal(a.troops);
+      return '<li>An army of <b>' + size.toLocaleString() + '</b> now at <b>' +
+             where + '</b></li>';
+    }).join('');
+
+    var plural = all.length > 1;
+    body.innerHTML =
+      '<p>' + (plural ? 'Some of your armies could' : 'Your army could') +
+      ' not continue — a city on ' + (plural ? 'their' : 'its') +
+      ' route has revolted and turned neutral. ' +
+      (plural ? 'They have' : 'It has') + ' halted. Issue new orders.</p>' +
+      '<ul class="mb-list">' + lines + '</ul>';
+
+    // Pause time so the player can react (mirrors the order-complete popup).
+    if (window.isTimeRunning && window.isTimeRunning() &&
+        typeof window.toggleTime === 'function') window.toggleTime();
+
+    panel.style.display = 'flex';
+    return true;
+  };
+
+  window.dismissMarchBlocked = function(startTime) {
+    var panel = document.getElementById('march-blocked-panel');
+    if (panel) panel.style.display = 'none';
+    if (startTime && window.isTimeRunning && !window.isTimeRunning() &&
+        typeof window.toggleTime === 'function') window.toggleTime();
+  };
+
+  // ── Non-interactive battle casualty summaries (case 3 field / case 4 retreat
+  // / destroyed). Queued during battle-return processing, shown consolidated
+  // before the New Year report. Total-scale per-class losses; no replenish
+  // buttons (the army isn't at a levy-capable friendly city).
+  var _battleCasualtyQueue = [];
+  // outcome: 'retreat' (survived, moved to friendly city),
+  //          'field'   (survived, not at a friendly city),
+  //          'destroyed'(army lost entirely)
+  function queueBattleCasualtySummary(outcome, destCityName, lossByClass, survivorArmy) {
+    _battleCasualtyQueue.push({
+      outcome: outcome,
+      dest: destCityName || null,
+      loss: lossByClass || { melee:0, archer:0, cavalry:0 },
+      lat: survivorArmy ? survivorArmy.lat : null,
+      lon: survivorArmy ? survivorArmy.lon : null
+    });
+  }
+  window.showBattleCasualtyPopup = function() {
+    if (!_battleCasualtyQueue.length) return false;
+    var items = _battleCasualtyQueue.slice();
+    _battleCasualtyQueue.length = 0;
+    var panel = document.getElementById('battle-cas-panel');
+    var body  = document.getElementById('battle-cas-body');
+    if (!panel || !body) return false;
+
+    var first = items[0];
+    if (first && first.lat != null && first.lon != null) {
+      try { map.setView([first.lat, first.lon], map.getZoom(), { animate: true }); } catch (e) {}
+    }
+
+    var clsLabel = { melee:'melee', archer:'ranged', cavalry:'cavalry' };
+    var blocks = items.map(function(it) {
+      var lossRows = ['melee','archer','cavalry'].filter(function(c){ return (it.loss[c]||0) > 0; })
+        .map(function(c){
+          return '<li><b style="color:#ff8866;">' + Math.round(it.loss[c]).toLocaleString() +
+                 '</b> ' + clsLabel[c] + ' lost</li>';
+        }).join('');
+      if (!lossRows) lossRows = '<li>Light losses.</li>';
+      var head;
+      if (it.outcome === 'destroyed') {
+        head = '<p>Your army was <b style="color:#ff6644;">destroyed</b> in battle.</p>';
+      } else if (it.outcome === 'retreat') {
+        head = '<p>Your army was beaten and retreated toward <b>' +
+               (it.dest ? cityDisplayName(it.dest) : 'friendly territory') +
+               '</b>. Replenish it when it reaches a friendly city.</p>';
+      } else {
+        head = '<p>Your army survived the battle in the field. Replenish it when it reaches a friendly city.</p>';
+      }
+      return head + '<ul class="mb-list">' + lossRows + '</ul>';
+    }).join('<div class="bc-divider"></div>');
+
+    body.innerHTML = blocks;
+
+    if (window.isTimeRunning && window.isTimeRunning() &&
+        typeof window.toggleTime === 'function') window.toggleTime();
+    panel.style.display = 'flex';
+    return true;
+  };
+  window.dismissBattleCasualty = function(startTime) {
+    var panel = document.getElementById('battle-cas-panel');
+    if (panel) panel.style.display = 'none';
+    // Chain: if a march-blocked popup is queued, show it next; the New Year
+    // report is shown after these by dismissNewYearReport's own chain.
+    if (typeof window.showMarchBlockedPopup === 'function' && window.showMarchBlockedPopup()) return;
+    if (startTime && window.isTimeRunning && !window.isTimeRunning() &&
+        typeof window.toggleTime === 'function') window.toggleTime();
+  };
+
   window.doSurrender = function() {
     var panel         = document.getElementById('attack-panel');
     var enemyIdx      = parseInt(panel.dataset.enemyArmyIdx,  10);
@@ -9044,11 +9515,11 @@ function troopIconSVG(sub, px) {
       var _playerFactionSur = playerSide === 'greece' ? 'G' : 'P';
       var _retreatReg = nearestRoadCity(_pa.lat, _pa.lon, _playerFactionSur, cityName);
       if (_retreatReg) {
-        _pa.lat      = _retreatReg.lat;
-        _pa.lon      = _retreatReg.lon;
-        _pa.cityName = _retreatReg.name;
-        _pa.moving   = false; _pa.movePath = null;
-        _pa.moveWpIdx = 0; _pa.moveSegProg = 0; _pa.moveDestCityName = null;
+        // March back to the nearest friendly city rather than teleporting.
+        if (!startArmyMoveToCity(playerArmyIdx, _retreatReg.name, _retreatReg.lat, _retreatReg.lon)) {
+          _pa.lat = _retreatReg.lat; _pa.lon = _retreatReg.lon; _pa.cityName = _retreatReg.name;
+          _pa.moving = false; _pa.movePath = null; _pa.moveWpIdx = 0; _pa.moveSegProg = 0; _pa.moveDestCityName = null;
+        }
       } else {
         // No friendly city reachable by road — wipe out the army
         armies.splice(playerArmyIdx, 1);
@@ -9237,6 +9708,21 @@ function troopIconSVG(sub, px) {
   function retreatEnemyArmy(army) {
     var bestReg = nearestRoadCity(army.lat, army.lon, ENEMY_FACTION, null);
     if (!bestReg) return false;
+    // March back along the road network rather than teleporting. Falls back to
+    // teleport only if no path can be built (e.g. army off-network).
+    var startKey = nearestAdjKey(army.lat, army.lon);
+    var destKey  = bestReg.lat + ',' + bestReg.lon;
+    var path = startKey ? findEnemyPathKeys(startKey, destKey) : null;
+    if (path && path.length >= 2) {
+      var wp = keysToWaypoints(path);
+      if (wp && wp.length >= 2) {
+        army.movePath = wp; army.moveSegIdx = 0; army.moveFrac = 0;
+        army.moveAction = 'move'; army.moveDestName = bestReg.name;
+        army.strikeTarget = null; army.role = 'garrison';
+        return true;
+      }
+    }
+    // Fallback: no reachable path — teleport (rare; preserves prior behavior).
     army.lat = bestReg.lat;
     army.lon = bestReg.lon;
     army.cityName     = bestReg.name;
@@ -9817,11 +10303,18 @@ function troopIconSVG(sub, px) {
       // road-connected friendly city — or remove it if wiped out / cut off.
       if (_defPlayerArmyIdx >= 0 && armies[_defPlayerArmyIdx]) {
         var _rpa = armies[_defPlayerArmyIdx];
+        var _rpaBefore = armySoldiersByClass(_rpa);
         if (_formReport && _formReport.blue) applyFormationReport(_rpa, _formReport.blue);
         var _rfac = playerSide === 'greece' ? 'G' : 'P';
         var _rReg = nearestRoadCity(_rpa.lat, _rpa.lon, _rfac, null);
         var _rTot = troopsTotal(_rpa.troops);
+        var _rpaAfter = armySoldiersByClass(_rpa);
+        var _rLoss = { melee:Math.max(0,_rpaBefore.melee-_rpaAfter.melee),
+                       archer:Math.max(0,_rpaBefore.archer-_rpaAfter.archer),
+                       cavalry:Math.max(0,_rpaBefore.cavalry-_rpaAfter.cavalry) };
         if (_rTot === 0 || !_rReg) {
+          if (_rTot === 0) _rLoss = _rpaBefore; // destroyed: everything lost
+          queueBattleCasualtySummary('destroyed', null, _rLoss, null);
           armies.splice(_defPlayerArmyIdx, 1);
           sessionStorage.setItem('armies', JSON.stringify(armies));
           setTimeout(function() {
@@ -9832,8 +10325,16 @@ function troopIconSVG(sub, px) {
             document.getElementById('wipeout-panel').style.display = 'flex';
           }, 300);
         } else {
-          _rpa.lat = _rReg.lat; _rpa.lon = _rReg.lon; _rpa.cityName = _rReg.name;
-          _rpa.moveAction = null; _rpa.movePath = null; _rpa.moveSegIdx = 0; _rpa.moveFrac = 0;
+          // Retreat as a road-march to the nearest friendly city (interceptable
+          // and redirectable like any move). Flagged to fire the replenish panel
+          // on arrival at a friendly city.
+          _rpa.needsReplenishReport = true; // fires replenish panel on friendly-city arrival
+          queueBattleCasualtySummary('retreat', _rReg.name, _rLoss, _rpa);
+          if (!startArmyMoveToCity(_defPlayerArmyIdx, _rReg.name, _rReg.lat, _rReg.lon)) {
+            // No path — fall back to instant reposition so the army isn't stranded.
+            _rpa.lat = _rReg.lat; _rpa.lon = _rReg.lon; _rpa.cityName = _rReg.name;
+            _rpa.moving = false; _rpa.movePath = null; _rpa.moveWpIdx = 0; _rpa.moveSegProg = 0;
+          }
           sessionStorage.setItem('armies', JSON.stringify(armies));
         }
       }
@@ -9888,6 +10389,7 @@ function troopIconSVG(sub, px) {
       // Retreat the stationed player army (if one existed at the city)
       if (_defPlayerArmyIdx >= 0 && armies[_defPlayerArmyIdx]) {
         var _pa = armies[_defPlayerArmyIdx];
+        var _paBefore = armySoldiersByClass(_pa);
         // Apply blue formation report — this automatically removes dead formations
         // (both player-owned formations by id and garrison formations by id:null).
         // Garrison entries are filtered out post-report below since they have id:null.
@@ -9908,7 +10410,16 @@ function troopIconSVG(sub, px) {
         var _retreatReg = nearestRoadCity(_pa.lat, _pa.lon, _playerFactionDef, _defCityName);
 
         var _paTotal = troopsTotal(_pa.troops);
+        var _paAfter = armySoldiersByClass(_pa);
+        var _paLoss = { melee:Math.max(0,_paBefore.melee-_paAfter.melee),
+                        archer:Math.max(0,_paBefore.archer-_paAfter.archer),
+                        cavalry:Math.max(0,_paBefore.cavalry-_paAfter.cavalry) };
+        // Only report when a real player field army was involved (skip pure
+        // garrison defense — garrisons auto-replenish and carry no field army).
+        var _hadField = (_paBefore.melee + _paBefore.archer + _paBefore.cavalry) > 0;
         if (_paTotal === 0 || !_retreatReg) {
+          if (_paTotal === 0) _paLoss = _paBefore;
+          if (_hadField) queueBattleCasualtySummary('destroyed', null, _paLoss, null);
           // Army wiped out or no place to go — remove it
           armies.splice(_defPlayerArmyIdx, 1);
           sessionStorage.setItem('armies', JSON.stringify(armies));
@@ -9921,12 +10432,15 @@ function troopIconSVG(sub, px) {
             document.getElementById('wipeout-panel').style.display = 'flex';
           }, 300);
         } else {
-          // Retreat to road-nearest friendly city
-          _pa.lat      = _retreatReg.lat;
-          _pa.lon      = _retreatReg.lon;
-          _pa.cityName = _retreatReg.name;
-          _pa.moving   = false; _pa.movePath = null;
-          _pa.moveWpIdx = 0; _pa.moveSegProg = 0; _pa.moveDestCityName = null;
+          // Retreat as a road-march to the road-nearest friendly city (not the
+          // one just captured). Interceptable/redirectable; fires the replenish
+          // panel on arrival.
+          _pa.needsReplenishReport = true; // replenish panel on friendly-city arrival
+          if (_hadField) queueBattleCasualtySummary('retreat', _retreatReg.name, _paLoss, _pa);
+          if (!startArmyMoveToCity(_defPlayerArmyIdx, _retreatReg.name, _retreatReg.lat, _retreatReg.lon)) {
+            _pa.lat = _retreatReg.lat; _pa.lon = _retreatReg.lon; _pa.cityName = _retreatReg.name;
+            _pa.moving = false; _pa.movePath = null; _pa.moveWpIdx = 0; _pa.moveSegProg = 0; _pa.moveDestCityName = null;
+          }
           sessionStorage.setItem('armies', JSON.stringify(armies));
         }
       }
@@ -9935,6 +10449,14 @@ function troopIconSVG(sub, px) {
       renderArmies();
       renderEnemyArmies();
     }
+  }
+
+  // Show any queued battle-casualty summaries (deferred so the map renders
+  // first). Its dismissal chains into the march-blocked popup if queued.
+  if (_battleCasualtyQueue.length) {
+    setTimeout(function(){
+      if (typeof window.showBattleCasualtyPopup === 'function') window.showBattleCasualtyPopup();
+    }, 350);
   }
 
   // ── Regular win: retreat or destroy enemy armies at the captured city,
@@ -11244,7 +11766,8 @@ function troopIconSVG(sub, px) {
       neutralCities.push(name);
       neutralCityYear[name] = curYear;
       risen.push(name);
-      rerouteArmiesFromCity(name);
+      rerouteArmiesFromCity(name);        // player armies destined FOR the city
+      blockMarchesThroughCity(name);      // any army marching THROUGH the city
       refreshCityMarker(name);
     });
     if (risen.length) {
@@ -11268,10 +11791,60 @@ function troopIconSVG(sub, px) {
     var taxRate  = parseInt(sessionStorage.getItem('taxRate')      || '8',      10);
     var totalArmsStored = parseInt(sessionStorage.getItem('advancedArms') || '0', 10);
     var stats    = getEmpireStats();
-    var _incomeGold = calcIncome(stats.totalPop, taxRate);
+    // ── Economy & unpaid-salary desertion (Model 2) ───────────────────────
+    // Sequence per year-end:
+    //  1. priorArrears = last year's carried debt (negative treasury coming in)
+    //  2. If flagged coming in AND income can't clear the prior arrears, DESERT:
+    //     f = (priorArrears - income) / present-flagged-salary-bill, capped 1.
+    //     Drains hpRem from flagged formations (partial soldiers, not whole
+    //     units); 0-hp formations are removed.
+    //  3. Prior arrears is forgiven (treasury floored to 0) and flags cleared —
+    //     survivors are "made whole" on last year's debt.
+    //  4. Income is consumed ONCE, arrears first: incomeLeft = income - priorArrears.
+    //  5. This year's (pro-rated, post-desertion) salary is charged against
+    //     incomeLeft plus any positive carried balance.
+    //  6. Any shortfall becomes the new arrears; survivors are re-flagged,
+    //     restarting the one-year grace clock.
+    var _incomeGold   = calcIncome(stats.totalPop, taxRate);
+    var _priorArrears = treasury < 0 ? -treasury : 0;
+    var _carry        = treasury > 0 ? treasury : 0;
+    var _wasFlagged   = sessionStorage.getItem('salaryArrears') === '1';
+
+    // 2. Desertion
+    var _desertedSoldiers = 0;
+    if (_wasFlagged && _priorArrears > 0) {
+      var _unpaidAfterIncome = Math.max(0, _priorArrears - _incomeGold);
+      var _fbill = flaggedSalaryBill();
+      var _f = _fbill > 0 ? Math.min(1, _unpaidAfterIncome / _fbill) : 0;
+      _desertedSoldiers = applyDesertion(_f);
+      if (_desertedSoldiers > 0 && typeof renderArmies === 'function') renderArmies();
+    }
+
+    // 3. Forgive prior arrears + clear flags (survivors made whole).
+    setUnpaidFlag(false);
+
+    // 4. Income consumed once (arrears first).
+    var _incomeLeft = Math.max(0, _incomeGold - _priorArrears);
+
+    // 5. Charge this year's pro-rated salary on survivors.
     var _salaryCost = calcArmySalary();
-    treasury    += _incomeGold;
-    treasury    -= _salaryCost;
+    treasury = _carry + _incomeLeft - _salaryCost;
+
+    // 6. New arrears → re-flag survivors, restart grace.
+    var _newArrears = treasury < 0 ? -treasury : 0;
+    if (_newArrears > 0) { setUnpaidFlag(true); sessionStorage.setItem('salaryArrears', '1'); }
+    else sessionStorage.removeItem('salaryArrears');
+
+    // Message state for the New Year report:
+    //  'grace'   — newly in arrears (was solvent) → warn
+    //  'paid'    — cleared prior arrears, ended solvent → praise
+    //  'paidnew' — cleared prior arrears but took on new → praise + warn
+    //  'desert'  — desertion fired this year → deserted + (arrears if any)
+    var _arrearsMsg = 'none';
+    if (_desertedSoldiers > 0) _arrearsMsg = 'desert';
+    else if (_priorArrears > 0 && _incomeGold >= _priorArrears) _arrearsMsg = (_newArrears > 0 ? 'paidnew' : 'paid');
+    else if (_priorArrears === 0 && _newArrears > 0) _arrearsMsg = 'grace';
+    else if (_newArrears > 0) _arrearsMsg = 'grace'; // in arrears, no desert, didn't clear prior (edge)
 
     // Temple construction — advance builds; complete any that hit their year.
     // Years count DOWN; a temple completes once mapYear has reached completeYear.
@@ -11380,7 +11953,10 @@ function troopIconSVG(sub, px) {
       totalArms:     totalArmsStored,                // stockpile after this year's production
       totalPop:      stats.totalPop + _playerPopGrowth, // empire population after this year's change
       uprisings:     _uprisings,                     // cities that newly revolted this year
-      neutralCities: neutralCities.slice()           // ALL cities currently in revolt
+      neutralCities: neutralCities.slice(),          // ALL cities currently in revolt
+      salaryArrears:    _newArrears,          // gold owed heading into next year
+      arrearsMsg:       _arrearsMsg,          // 'none' | 'grace' | 'paid' | 'paidnew' | 'desert'
+      desertedSoldiers: _desertedSoldiers     // soldiers lost to desertion this year
     };
     if (typeof window.showNewYearReport === 'function') window.showNewYearReport();
   };
@@ -11388,6 +11964,14 @@ function troopIconSVG(sub, px) {
   // On load, repaint markers for any cities that already hold temples (state
   // persists across the map↔battle reload cycle) and sync tech effects.
   setTimeout(function(){
+    // Repair marches plotted before a city went into revolt — stored waypoint
+    // paths are walked blindly by the movement ticks, so on load re-check every
+    // neutral city and halt/re-route any army whose path runs through it.
+    (neutralCities || []).forEach(function(n){
+      if (typeof blockMarchesThroughCity === 'function') blockMarchesThroughCity(n);
+    });
+    _marchBlockedQueue.length = 0; // load-repair halts silently — no popup on load
+
     var seen = {};
     (templeList || []).forEach(function(t){
       if (seen[t.city]) return; seen[t.city] = 1;
@@ -12035,10 +12619,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
       </button>
       <div class="emp-col-body" id="emp-body-treasury" style="display:none;">
         <div class="emp-stat-row">
-          <span class="emp-stat-label">Total Population</span>
-          <span class="emp-stat-val" id="emp-total-pop">0</span>
-        </div>
-        <div class="emp-stat-row">
           <span class="emp-stat-label">Cities Under Control</span>
           <span class="emp-stat-val" id="emp-total-cities">0</span>
         </div>
@@ -12071,13 +12651,25 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
           <span class="emp-stat-label">Birth Rate</span>
           <span class="emp-stat-val" id="emp-birth-rate">3.36%</span>
         </div>
+        <div class="emp-stat-row">
+          <span class="emp-stat-label">Total Population</span>
+          <span class="emp-stat-val" id="emp-total-pop">0</span>
+        </div>
         <div class="emp-income-row">
           <span class="emp-stat-label">Est. Pop Growth / Year</span>
           <span class="emp-income-val" id="emp-pop-growth" style="color:#88ccff;text-shadow:0 0 10px rgba(100,180,255,.4);">+0</span>
         </div>
+        <div class="emp-stat-row">
+          <span class="emp-stat-label">Est. Population Next Year</span>
+          <span class="emp-stat-val" id="emp-pop-next">0</span>
+        </div>
         <div class="emp-tax-note">Income = Empire Population × 3 × Tax Rate — collected once per year.</div>
 
-        <div class="emp-stat-row" style="margin-top:8px;border-top:1px solid rgba(201,168,76,.25);padding-top:8px;">
+        <div class="emp-income-row" style="margin-top:8px;border-top:1px solid rgba(201,168,76,.25);padding-top:8px;">
+          <span class="emp-stat-label">Est. Change in Treasury / Year</span>
+          <span class="emp-income-val" id="emp-treasury-change">+0</span>
+        </div>
+        <div class="emp-stat-row">
           <span class="emp-stat-label">Est. Treasury Next Year</span>
           <span class="emp-stat-val" id="emp-treasury-next" style="font-size:13px;">0</span>
         </div>
@@ -12087,7 +12679,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
     <!-- ── Arms Production ── -->
     <div class="emp-collapse">
       <button class="emp-col-header" onclick="window.empToggleSection && window.empToggleSection('arms')">
-        <span class="emp-col-chevron" id="emp-chev-arms">▸</span><span class="emp-col-title">⚒ Military Arms</span><span class="emp-col-total" id="emp-col-arms-total"></span>
+        <span class="emp-col-chevron" id="emp-chev-arms">▸</span><span class="emp-col-title">⚒ Arms</span><span class="emp-col-total" id="emp-col-arms-total"></span>
       </button>
       <div class="emp-col-body" id="emp-body-arms" style="display:none;">
         <div class="emp-section-title">⚔ Total Advanced Arms</div>
@@ -12503,6 +13095,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
       } else if (!nearTop) {
         crossedTop = false;
       }
+
       // Sand: fill bottom pile, drain top — both stop at half (level 0.5)
       if (pileLevel < 0.5) {
         pileLevel = Math.min(0.5, pileLevel + 0.00055);
@@ -12576,6 +13169,24 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
   background:rgba(0,0,0,.3); border-radius:5px;
   border:1px solid rgba(150,80,20,.3);
 }
+.rep-cost-table {
+  width:100%; margin-top:10px; border-collapse:collapse;
+  background:rgba(0,0,0,.3); border:1px solid rgba(150,80,20,.3);
+  font-size:11px;
+}
+.rep-cost-table th {
+  color:#9a8050; font-weight:normal; text-align:right;
+  padding:6px 10px 5px; border-bottom:1px solid rgba(150,80,20,.3);
+}
+.rep-cost-table td {
+  color:#c9a84c; font-weight:bold; text-align:right; padding:5px 10px;
+}
+.rep-cost-table th:first-child, .rep-cost-table td:first-child {
+  text-align:left; color:#9a8050; font-weight:normal;
+}
+.rep-cost-table tr:last-child td {
+  border-top:1px solid rgba(150,80,20,.3);
+}
 .rep-summary-row {
   display:flex; justify-content:space-between;
   font-size:11px; margin-bottom:4px;
@@ -12639,30 +13250,27 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
   <div id="replenish-form">
     <h2>⚔ Battle Report</h2>
     <span id="rep-army-city"></span>
+    <div id="rep-arrived-note" style="display:none;margin:8px 0;padding:8px 10px;background:rgba(20,80,30,.22);border:1px solid rgba(80,200,110,.45);border-radius:5px;color:#a8e0b0;font-size:12px;line-height:1.45;"></div>
 
-    <div class="rep-summary">
-      <div class="rep-summary-row">
-        <span class="rep-s-label">Total Replenishment Cost</span>
-        <span class="rep-s-val" id="rep-total-cost">0</span>
-      </div>
-      <div class="rep-divider"></div>
-      <div class="rep-summary-row">
-        <span class="rep-s-label">City Population</span>
-        <span class="rep-s-val" id="rep-city-pop">0</span>
-      </div>
-      <div class="rep-summary-row">
-        <span class="rep-s-label">Net Population After Replenishment</span>
-        <span class="rep-s-val" id="rep-net-pop">0</span>
-      </div>
-      <div class="rep-summary-row">
-        <span class="rep-s-label">Advanced Arms Required</span>
-        <span class="rep-s-val" id="rep-arms-cost">0</span>
-      </div>
-      <div class="rep-summary-row">
-        <span class="rep-s-label">Gold Required</span>
-        <span class="rep-s-val" id="rep-gold-cost">0</span>
-      </div>
-    </div>
+    <table class="rep-cost-table">
+      <thead>
+        <tr><th></th><th>City Pop.</th><th>Gold</th><th>Arms</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Current Total</td>
+          <td id="rep-cur-pop">0</td><td id="rep-cur-gold">0</td><td id="rep-cur-arms">0</td>
+        </tr>
+        <tr>
+          <td>Required</td>
+          <td id="rep-req-pop">0</td><td id="rep-req-gold">0</td><td id="rep-req-arms">0</td>
+        </tr>
+        <tr>
+          <td>After Replenish</td>
+          <td id="rep-after-pop">0</td><td id="rep-after-gold">0</td><td id="rep-after-arms">0</td>
+        </tr>
+      </tbody>
+    </table>
 
     <div class="rep-btns">
       <button id="rep-btn-replenish" onclick="doReplenish()">⚔ Replenish Army</button>
@@ -12793,6 +13401,10 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
         <span class="rep-s-label">Total Gold</span>
         <span class="rep-s-val" id="ny-total-gold">0</span>
       </div>
+      <div class="rep-summary-row" id="ny-desert-row" style="display:none;">
+        <span class="rep-s-label" style="color:#ff7755;">Soldiers Deserted (unpaid)</span>
+        <span class="rep-s-val" id="ny-deserted" style="color:#ff5555;">0</span>
+      </div>
       <div class="rep-divider"></div>
       <div class="rep-summary-row">
         <span class="rep-s-label">Advanced Arms Produced</span>
@@ -12811,6 +13423,8 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
         <span class="rep-s-val" id="ny-total-pop">0</span>
       </div>
     </div>
+
+    <div id="ny-arrears-warning" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(120,20,10,.25);border:1px solid rgba(255,80,50,.5);border-radius:5px;color:#ffaa88;font-size:12px;line-height:1.5;"></div>
 
     <div class="ny-section-title">Uprisings in Persian Empire</div>
     <div id="ny-uprisings"></div>
@@ -12983,9 +13597,52 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
     var tg = document.getElementById('ny-total-gold');
     var ta = document.getElementById('ny-total-arms');
     var tp = document.getElementById('ny-total-pop');
-    if (tg) tg.textContent = n(r.totalGold || 0);
+    if (tg) { tg.textContent = n(r.totalGold || 0);
+              tg.style.color = (r.totalGold || 0) < 0 ? '#ff5555' : ''; }
     if (ta) ta.textContent = n(r.totalArms || 0);
     if (tp) tp.textContent = n(r.totalPop  || 0);
+
+    // Unpaid-salary desertions + arrears message (5-state matrix).
+    var dr = document.getElementById('ny-desert-row');
+    var dv = document.getElementById('ny-deserted');
+    if (dr && dv) {
+      if ((r.desertedSoldiers || 0) > 0) {
+        dv.textContent = n(r.desertedSoldiers);
+        dr.style.display = 'flex';
+      } else dr.style.display = 'none';
+    }
+    var aw = document.getElementById('ny-arrears-warning');
+    if (aw) {
+      var owed = '<b style="color:#ff8866;">' + n(r.salaryArrears || 0) + ' gold</b>';
+      var msg = '', good = false;
+      switch (r.arrearsMsg) {
+        case 'grace':   // newly in arrears
+          msg = '&#9888; Your soldiers demand their back pay &mdash; ensure you have a positive treasury balance next year to pay off your arrears of ' + owed + ' or they will desert.';
+          break;
+        case 'paid':    // cleared prior arrears, ended solvent
+          msg = '&#10004; Good work &mdash; you paid off last year\u2019s arrears and your soldiers are content.';
+          good = true;
+          break;
+        case 'paidnew': // cleared prior arrears but accrued new
+          msg = '&#10004; You paid off last year\u2019s arrears &mdash; well done &mdash; but you\u2019ve accrued new arrears of ' + owed + ' this year; settle them next year or your troops will desert.';
+          good = true;
+          break;
+        case 'desert':  // desertion fired this year
+          msg = '&#9888; Your troops deserted due to lack of pay.'
+              + ((r.salaryArrears || 0) > 0
+                  ? ' Pay this year\u2019s arrears of ' + owed + ' or it will happen again.'
+                  : '');
+          break;
+        default: msg = '';
+      }
+      if (msg) {
+        aw.innerHTML = msg;
+        aw.style.background = good ? 'rgba(20,90,30,.22)' : 'rgba(120,20,10,.25)';
+        aw.style.borderColor = good ? 'rgba(80,200,110,.5)' : 'rgba(255,80,50,.5)';
+        aw.style.color = good ? '#a8e0b0' : '#ffaa88';
+        aw.style.display = 'block';
+      } else aw.style.display = 'none';
+    }
 
     // Uprisings: every city currently in revolt (neutral), flagged as newly
     // risen this year or still in revolt from a prior year.
@@ -13014,6 +13671,12 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
   window.dismissNewYearReport = function(startTime) {
     var panel = document.getElementById('newyear-panel');
     if (panel) panel.style.display = 'none';
+    // If a revolt this year halted marching armies, show that popup next —
+    // it manages its own time-pause, so only resume the clock here when there
+    // is nothing queued.
+    var shown = (typeof window.showMarchBlockedPopup === 'function') &&
+                window.showMarchBlockedPopup();
+    if (shown) return;
     // Dismiss leaves time paused; Start Time resumes the clock.
     if (startTime && window.isTimeRunning && !window.isTimeRunning() &&
         typeof window.toggleTime === 'function') {
@@ -13393,6 +14056,88 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
   </div>
 </div>
 
+<!-- ── March Blocked by Revolt Popup ─────────────────────────────────────── -->
+<style>
+#march-blocked-panel {
+  display:none; position:fixed; inset:0; z-index:1750;
+  align-items:center; justify-content:center;
+  background:rgba(0,0,0,.58);
+}
+#march-blocked-card {
+  background:linear-gradient(160deg,#1a0e06,#241408);
+  border:2px solid rgba(180,110,40,.6); border-radius:8px;
+  padding:22px 26px 18px; width:min(94vw,440px); max-height:92vh; overflow-y:auto;
+  font-family:Georgia,serif; color:#e8d4a8;
+  box-shadow:0 0 60px rgba(0,0,0,.85), 0 0 0 1px rgba(180,110,40,.2);
+}
+#march-blocked-card h2 {
+  color:#e0a860; font-size:11px; letter-spacing:5px;
+  text-transform:uppercase; margin:0 0 10px; text-align:center;
+}
+#march-blocked-body p { font-size:13px; line-height:1.55; margin:0 0 10px; }
+#march-blocked-body .mb-list {
+  margin:0; padding-left:20px; font-size:12px; line-height:1.7; color:#c9a84c;
+}
+.mb-btns { display:flex; gap:10px; justify-content:center; margin-top:16px; }
+.mb-btns button {
+  font-family:Georgia,serif; font-size:12px; letter-spacing:1px;
+  padding:8px 18px; border-radius:5px; cursor:pointer;
+  background:linear-gradient(160deg,#3a2410,#241408);
+  border:1px solid rgba(180,110,40,.6); color:#e8d4a8;
+}
+.mb-btns button:hover { background:linear-gradient(160deg,#4a3018,#301a0a); color:#ffdca0; }
+</style>
+<div id="march-blocked-panel">
+  <div id="march-blocked-card">
+    <h2>⚠ March Interrupted</h2>
+    <div id="march-blocked-body">—</div>
+    <div class="mb-btns">
+      <button onclick="window.dismissMarchBlocked(false)">Dismiss</button>
+      <button onclick="window.dismissMarchBlocked(true)">Start Time</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Battle Casualty Summary (non-interactive) ────────────────────────── -->
+<style>
+#battle-cas-panel {
+  display:none; position:fixed; inset:0; z-index:1755;
+  align-items:center; justify-content:center; background:rgba(0,0,0,.58);
+}
+#battle-cas-card {
+  background:linear-gradient(160deg,#20100a,#160a06);
+  border:2px solid rgba(180,70,50,.6); border-radius:8px;
+  padding:22px 26px 18px; width:min(94vw,440px); max-height:92vh; overflow-y:auto;
+  font-family:Georgia,serif; color:#e8d0b8;
+  box-shadow:0 0 60px rgba(0,0,0,.85);
+}
+#battle-cas-card h2 {
+  color:#e08860; font-size:11px; letter-spacing:5px; text-transform:uppercase;
+  margin:0 0 10px; text-align:center;
+}
+#battle-cas-body p { font-size:13px; line-height:1.55; margin:0 0 8px; }
+#battle-cas-body .mb-list { margin:0; padding-left:20px; font-size:12px; line-height:1.7; color:#c9a84c; }
+#battle-cas-body .bc-divider { height:1px; background:rgba(180,70,50,.3); margin:12px 0; }
+.bc-btns { display:flex; gap:10px; justify-content:center; margin-top:16px; }
+.bc-btns button {
+  font-family:Georgia,serif; font-size:12px; letter-spacing:1px;
+  padding:8px 18px; border-radius:5px; cursor:pointer;
+  background:linear-gradient(160deg,#3a2410,#241408);
+  border:1px solid rgba(180,90,50,.6); color:#e8d0b8;
+}
+.bc-btns button:hover { background:linear-gradient(160deg,#4a3018,#301a0a); color:#ffdca0; }
+</style>
+<div id="battle-cas-panel">
+  <div id="battle-cas-card">
+    <h2>⚔ Battle Report</h2>
+    <div id="battle-cas-body">—</div>
+    <div class="bc-btns">
+      <button onclick="window.dismissBattleCasualty(false)">Dismiss</button>
+      <button onclick="window.dismissBattleCasualty(true)">Start Time</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Enemy Army Encountered (road battle) Popup ───────────────────────── -->
 <div id="road-panel">
   <div id="road-form">
@@ -13742,7 +14487,7 @@ function ptlWriteSave(id, name) {
   try {
     var snap = ptlCampaignSnapshot();
     if (!snap.armies && !snap.playerSide) return false;            // nothing meaningful to save
-    var meta = { v:1, name: name || (id === 'auto' ? 'Autosave' : id),
+    var meta = { v:1, name: String(name || (id === 'auto' ? 'Autosave' : id)).slice(0, 20),
                  ts: Date.now(), year: parseInt(snap.mapYear || '499', 10),
                  faction: snap.playerSide || 'greece', data: snap };
     localStorage.setItem(_ptlSaveSlotKey(id), JSON.stringify(meta));
@@ -13754,6 +14499,7 @@ function ptlImportSave(id, fileText) {
     var meta = JSON.parse(fileText);
     if (!meta || !meta.data || !meta.data.playerSide) return false; // sanity check it's a PtL save
     if (!meta.v) meta.v = 1;
+    if (meta.name != null) meta.name = String(meta.name).slice(0, 20); // enforce the 20-char save-name limit on imports
     localStorage.setItem(_ptlSaveSlotKey(id), JSON.stringify(meta));
     return true;
   } catch (e) { return false; }
@@ -13791,8 +14537,12 @@ function ptlExportSave(id) {
   function fmtAgo(ts){ if(!ts) return ''; var s=Math.floor((Date.now()-ts)/1000); if(s<60)return 'just now'; if(s<3600)return Math.floor(s/60)+'m ago'; if(s<86400)return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; }
   function metaLine(m){ if(!m) return 'Empty'; return (m.faction==='persia'?'Persia':'Greece')+' · '+(m.year||'?')+' BCE · '+fmtAgo(m.ts); }
   function doSave(id){
-    var def=(ptlReadSave(id)||{}).name||('Save '+(id==='slot1'?'1':'2'));
-    var name=prompt('Name this save:', def); if(name===null) return;
+    var def=String((ptlReadSave(id)||{}).name||('Save '+(id==='slot1'?'1':'2'))).slice(0,20);
+    var name=prompt('Name this save (20 characters max):', def);
+    while(name!==null && name.trim().length>20){
+      name=prompt('Save names are limited to 20 characters — please shorten it:', name.trim());
+    }
+    if(name===null) return;
     if(ptlWriteSave(id,(name.trim()||def))) render(); else alert('Could not save — browser storage may be full.');
   }
   function doLoad(id,m){
@@ -16697,6 +17447,8 @@ window.confirmFoodWarn = function() {
     'temple-convert-panel':    function(){ window.closeTempleConvert && window.closeTempleConvert(); },
     'replenish-panel':         function(){ window.dismissReplenish && window.dismissReplenish(); },
     'newyear-panel':           function(){ window.dismissNewYearReport && window.dismissNewYearReport(); },
+    'battle-cas-panel':        function(){ window.dismissBattleCasualty && window.dismissBattleCasualty(false); },
+    'march-blocked-panel':     function(){ window.dismissMarchBlocked && window.dismissMarchBlocked(false); },
     'inspect-panel':           function(){ window.closeInspect && window.closeInspect(); },
     'wipeout-panel':           function(){ var w=document.getElementById('wipeout-panel'); if(w) w.style.display='none'; },
     'blacksmith-warn-overlay': function(){ window.cancelBlacksmithWarn && window.cancelBlacksmithWarn(); },
