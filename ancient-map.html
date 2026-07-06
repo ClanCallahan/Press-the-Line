@@ -4490,6 +4490,10 @@ function troopIconSVG(sub, px) {
         ? '<button style="'+btnStyle+'background:linear-gradient(135deg,#1a1410,#0c0a06);'
           +'border:1.5px solid #9a7a3a;color:#e8c878;" onclick="window.splitArmy('+idx+')">⑃ Split</button>'
         : '';
+      var disbandBtn = (!a.moving && total >= 1)
+        ? '<button style="'+btnStyle+'background:linear-gradient(135deg,#241010,#120606);'
+          +'border:1.5px solid #a04a3a;color:#e8a090;" onclick="window.disbandArmy('+idx+')">✖ Disband</button>'
+        : '';
       // Recruit button — only when stationary at a player-owned city. Costs come
       // from the city's population + player arms/gold, same as raising a new army.
       var _canRecruit = false;
@@ -4516,7 +4520,7 @@ function troopIconSVG(sub, px) {
           +'<div class="psub">'+lines.join('<br>')+_marchNote+'</div>'
           +supplyBadge
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">'
-          +moveBtn+attackBtn+mergeBtn+splitBtn+recruitBtn+inspectBtn
+          +moveBtn+attackBtn+mergeBtn+splitBtn+recruitBtn+inspectBtn+disbandBtn
           +'</div>', {maxWidth:220})
         .addTo(map);
       // Handle merge-mode click — uses original movement system
@@ -6585,6 +6589,105 @@ function troopIconSVG(sub, px) {
 
   window.closeSplitPanel = function() {
     var panel = document.getElementById('split-panel');
+    if (panel) panel.style.display = 'none';
+  };
+
+  // ── Disband ────────────────────────────────────────────────────────────────
+  // Mirrors the split UI (per-type sliders) but dissolves the selected
+  // formations instead of detaching them into a new army. Per the agreed
+  // economy model there is NO treasury credit — disbanded troops simply stop
+  // counting toward the salary bill and future desertion going forward.
+  window.disbandArmy = function(idx) {
+    map.closePopup();
+    var a = armies[idx];
+    if (!a || !a.troops) return;
+    if (a.moving) { _splitActionMsg('Halt the army before disbanding it'); return; }
+    if (troopsTotal(a.troops) < 1) return;
+    var rows = '';
+    ['melee','archer','cavalry'].forEach(function(cls) {
+      Object.keys(a.troops).filter(function(s){
+        return (a.troops[s]||0) > 0 && UNIT_STATS[s] && UNIT_STATS[s].class === cls;
+      }).forEach(function(sub) {
+        var max = a.troops[sub];
+        rows += '<div class="army-variant-row">'
+          + '<div><div class="army-variant-name">' + UNIT_STATS[sub].label + '</div>'
+          + '<div class="army-variant-costs">' + max + ' formations available</div></div>'
+          + '<input class="army-slider" type="range" id="disband-s-' + sub + '" min="0" max="' + max + '" value="0" oninput="window.updateDisbandTotals()">'
+          + '<span class="army-slider-val" id="disband-v-' + sub + '">0</span>'
+          + '</div>';
+      });
+    });
+    document.getElementById('disband-units').innerHTML = rows;
+    var panel = document.getElementById('disband-panel');
+    panel.dataset.armyIdx = idx;
+    document.getElementById('disband-title').textContent = 'Army at ' + (cityDisplayName(a.cityName) || 'the field');
+    window.updateDisbandTotals();
+    panel.style.display = 'flex';
+  };
+
+  window.updateDisbandTotals = function() {
+    var panel = document.getElementById('disband-panel');
+    var idx = parseInt(panel.dataset.armyIdx, 10);
+    var a = armies[idx];
+    if (!a || !a.troops) return;
+    var gone = 0, remain = 0;
+    Object.keys(a.troops).forEach(function(sub) {
+      var el = document.getElementById('disband-s-' + sub);
+      var v = el ? (parseInt(el.value, 10) || 0) : 0;
+      var vEl = document.getElementById('disband-v-' + sub);
+      if (vEl) vEl.textContent = v;
+      gone += v; remain += (a.troops[sub] - v);
+    });
+    var info = document.getElementById('disband-info');
+    if (info) {
+      info.textContent = remain === 0
+        ? (gone + ' formations disbanded · the entire army is dissolved')
+        : (gone + ' formations disbanded · ' + remain + ' remain');
+    }
+    var btn = document.getElementById('disband-confirm');
+    if (btn) {
+      var ok = gone >= 1;
+      btn.disabled = !ok;
+      btn.style.opacity = ok ? '1' : '0.45';
+    }
+  };
+
+  window.confirmDisbandArmy = function() {
+    var panel = document.getElementById('disband-panel');
+    var idx = parseInt(panel.dataset.armyIdx, 10);
+    var a = armies[idx];
+    if (!a || !a.troops) { panel.style.display = 'none'; return; }
+    var spec = {}, gone = 0;
+    Object.keys(a.troops).forEach(function(sub) {
+      var el = document.getElementById('disband-s-' + sub);
+      var v = el ? (parseInt(el.value, 10) || 0) : 0;
+      spec[sub] = v; gone += v;
+    });
+    if (gone < 1) return;
+    // Dissolve: remove the selected formations (from the end of each xp stack,
+    // mirroring split's selection). No treasury change.
+    Object.keys(spec).forEach(function(sub) {
+      var want = spec[sub] | 0;
+      if (want <= 0) return;
+      var have = a.troops[sub] || 0;
+      var nGone = Math.min(want, have);
+      if (nGone <= 0) return;
+      var arr = a.xp[sub] || [];
+      arr.splice(Math.max(0, arr.length - nGone), nGone);
+      var remain = have - nGone;
+      if (remain <= 0) { delete a.troops[sub]; delete a.xp[sub]; }
+      else { a.troops[sub] = remain; a.xp[sub] = arr; }
+    });
+    // If the whole army was dissolved, remove it.
+    if (troopsTotal(a.troops) === 0) armies.splice(idx, 1);
+    sessionStorage.setItem('armies', JSON.stringify(armies));
+    panel.style.display = 'none';
+    renderArmies();
+    if (typeof redrawAllSupplyLines === 'function') redrawAllSupplyLines();
+  };
+
+  window.closeDisbandPanel = function() {
+    var panel = document.getElementById('disband-panel');
     if (panel) panel.style.display = 'none';
   };
 
@@ -12431,6 +12534,29 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
   </div>
 </div>
 
+<!-- ── Disband Army Panel ─────────────────────────────────────────────────── -->
+<style>
+#disband-panel { display:none; position:fixed; inset:0; z-index:1600; align-items:center; justify-content:center; background:rgba(0,0,0,.55); }
+#disband-form { background:linear-gradient(160deg,#160a06,#241008); border:1.5px solid rgba(160,74,58,.6); border-radius:8px; padding:22px 24px 18px; width:min(94vw,420px); max-height:92vh; overflow-y:auto; font-family:Georgia,serif; box-shadow:0 0 50px rgba(0,0,0,.8); }
+#disband-form h2 { color:#e8a090; font-size:11px; letter-spacing:5px; text-transform:uppercase; margin:0 0 2px; font-family:'Cinzel',Georgia,serif; }
+#disband-title { color:#e8a090; font-size:17px; font-weight:700; letter-spacing:2px; font-variant:small-caps; margin:0 0 4px; display:block; }
+#disband-warn { color:#d08070; font-size:10px; font-style:italic; margin:0 0 12px; display:block; }
+#disband-info { color:#c8a070; font-size:11px; font-style:italic; margin:10px 0 4px; text-align:center; }
+</style>
+<div id="disband-panel">
+  <div id="disband-form">
+    <h2>✖ Disband Army</h2>
+    <span id="disband-title"></span>
+    <span id="disband-warn">Disbanded troops are dissolved permanently. This cannot be undone.</span>
+    <div id="disband-units"></div>
+    <div id="disband-info"></div>
+    <div class="army-btns">
+      <button class="army-btn-create" id="disband-confirm" onclick="window.confirmDisbandArmy()">✖ Disband</button>
+      <button class="army-btn-cancel" onclick="window.closeDisbandPanel()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Army Action Hint Bar ───────────────────────────────────────────────── -->
 <style>
 #army-action-bar {
@@ -17440,6 +17566,7 @@ window.confirmFoodWarn = function() {
   var closers = {
     'army-panel':              function(){ window.cancelArmy && window.cancelArmy(); },
     'split-panel':             function(){ window.closeSplitPanel && window.closeSplitPanel(); },
+    'disband-panel':           function(){ window.closeDisbandPanel && window.closeDisbandPanel(); },
     'empire-panel':            function(){ window.closeEmpirePanel && window.closeEmpirePanel(); },
     'gods-panel':              function(){ window.closeGodsPanel && window.closeGodsPanel(); },
     'tech-tree-panel':         function(){ window.closeTechTree && window.closeTechTree(); },
