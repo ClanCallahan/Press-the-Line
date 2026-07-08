@@ -2626,12 +2626,17 @@ function _drawFatigueOutlines() {
   const g = exhaustOutlineGraphics;
   g.clear();
   const PAD = 2.5, INSET = FATIGUE_LINE_W / 2;
+  // Tutorial illustration: when window._btutForceFatigueFlash is set, draw a full
+  // red outline on EVERY soldier regardless of stamina, so the fatigue cue can be
+  // demonstrated while the sim is paused (no stamina drain needed). Breathes via
+  // wall-clock time. 0/false ⇒ normal stamina-gated behaviour.
+  const _force = window._btutForceFatigueFlash ? (0.72 + 0.28 * Math.sin(performance.now() / 1000 * 3.2)) : 0;
   for (const s of soldiers) {
     if (!s.alive || s.kind === 'general' || !s.container?.active) continue;
     const st = (s.stamina != null) ? s.stamina : STAMINA_MAX;
-    if (!s._exhausted && st >= FATIGUE_SHOW_AT) continue;
+    if (_force <= 0 && !s._exhausted && st >= FATIGUE_SHOW_AT) continue;
     // Fatigue intensity: 0 at the show threshold → 1 at zero stamina/exhausted.
-    const t = s._exhausted ? 1 : Math.min(1, Math.max(0, 1 - st / FATIGUE_SHOW_AT));
+    const t = _force > 0 ? _force : (s._exhausted ? 1 : Math.min(1, Math.max(0, 1 - st / FATIGUE_SHOW_AT)));
     const alpha = 0.25 + 0.65 * t;
     // Light red → strong red as fatigue deepens (green/blue channels fall).
     const gb = Math.round(0x88 * (1 - t) + 0x33 * t);
@@ -16559,7 +16564,7 @@ function _btutWatchPostBattle(){
 }
 
 // ── Beat definitions (increment 2b: Skirmish + Army Orders → Charge) ────────
-var _btut_origSkirmish = null, _btut_orderHandler = null, _btut_origFireShout = null, _btut_genPathPoll = null, _btut_origCommitOrder = null, _btut_focusHandler = null, _btut_skirmishAimPoll = null, _btut_attackAimPoll = null, _btut_attackDemoTimer = null, _btut_attackCommitPoll = null, _btut_mfPoll = null, _btut_attackStopPoll = null;
+var _btut_origSkirmish = null, _btut_orderHandler = null, _btut_origFireShout = null, _btut_genPathPoll = null, _btut_origCommitOrder = null, _btut_focusHandler = null, _btut_skirmishAimPoll = null, _btut_attackAimPoll = null, _btut_attackDemoTimer = null, _btut_attackCommitPoll = null, _btut_mfPoll = null, _btut_attackStopPoll = null, _btut_staminaAimPoll = null;
 // Guide-hand trace for the general's circle of influence: ring the perimeter
 // (BAR_LENGTH world-radius around the general) then draw a spoke to the centre
 // to evoke the sweeping bar. Loops until the player dismisses the beat.
@@ -16650,9 +16655,9 @@ var _BTUT_BEATS = [
   },
   {
     id: 'armyCharge', allow: ['#order-slider'],
-    text: 'Set your army’s posture with the <b>Army-wide Orders</b> slider. Drag it all the way to <b>Charge</b> to send your whole line running into the enemy.',
+    text: 'Set your army’s posture with the <b>Army-wide Orders</b> slider. <b>Hold</b> locks shields for the best armor; drag it to <b>Charge</b> to send your line running in — closing fast, but with lower armor and heavier stamina drain.',
     highlight: '#order-slider',
-    impactText: 'The line charges forward into the fray…',
+    impactText: 'The line charges — and begins to tire. Watch the <b>Total Stamina</b> bars fall…',
     impactMs: 4500,
     arm: function(done){
       var sl = document.getElementById('order-slider');
@@ -16661,6 +16666,20 @@ var _BTUT_BEATS = [
       if (sl) sl.addEventListener('input', _btut_orderHandler);
     },
     disarm: function(){ var sl = document.getElementById('order-slider'); if (sl && _btut_orderHandler) sl.removeEventListener('input', _btut_orderHandler); _btut_orderHandler = null; if (window.tutHand) window.tutHand.hide(); }
+  },
+  {
+    id: 'stamina', allow: [], dismiss: true,
+    text: 'Charging, sprinting, and fighting drain <b>stamina</b> — see the <b>Total Stamina</b> bars, now lower after that charge. As troops tire a <b>red outline</b> creeps in (shown on your whole line here); at zero they are <b>exhausted</b> — slowed to a march, striking weaker, and losing armor — and recover only while <b>holding or marching</b>.',
+    highlight: '#stamina-bars',
+    impactMs: 0,
+    onShow: function(){
+      window._btutForceFatigueFlash = true;   // demo: flash red outlines on all troops while paused
+      var aimed = false;
+      function aim(){ if (!aimed && window.tutHand && window.tutHand.pointAtEl('#stamina-bars', 18)) aimed = true; }
+      aim();
+      if (!aimed) _btut_staminaAimPoll = setInterval(function(){ aim(); if (aimed){ clearInterval(_btut_staminaAimPoll); _btut_staminaAimPoll = null; } }, 150);
+    },
+    disarm: function(){ window._btutForceFatigueFlash = false; if (_btut_staminaAimPoll){ clearInterval(_btut_staminaAimPoll); _btut_staminaAimPoll = null; } if (window.tutHand) window.tutHand.hide(); }
   },
   {
     id: 'shout', allow: [],
@@ -16846,7 +16865,7 @@ function _btutDeployDragGesture(){
 // Item 1: reorder the battle beats — general lessons first, then shout, skirmish,
 // the army-wide slider, and only then the attack lessons.
 (function(){
-  var _order = ['moveGeneral','genCircle','genFocus','shout','skirmish','armyCharge','attack','attackStop','moveFormInfo','release'];
+  var _order = ['moveGeneral','genCircle','genFocus','shout','skirmish','armyCharge','stamina','attack','attackStop','moveFormInfo','release'];
   var _by = {}; _BTUT_BEATS.forEach(function(b){ _by[b.id] = b; });
   var _seq = _order.map(function(id){ return _by[id]; }).filter(Boolean);
   _BTUT_BEATS.forEach(function(b){ if (_order.indexOf(b.id) === -1) _seq.push(b); });  // keep any unlisted beats

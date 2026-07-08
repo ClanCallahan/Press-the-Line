@@ -16206,7 +16206,13 @@ function tutOnTaxSet() {
   if (window.tutHand) window.tutHand.hide();
   tutRemoveTaxWatch();
   tutGateDisengage();   // the player already closed the panel
-  tutAdvance(); // → build-temples
+  // Arrears lesson (Option A): before moving on to temples, explain that armies
+  // draw yearly salaries and will desert if the treasury can't pay them. The gate
+  // is already disengaged, so a Got-It banner (same pattern as the supply lessons)
+  // is safe here. ptl-tut-banner-top is still on the body, keeping it clear of the
+  // bottom panels.
+  tutShowBanner('Your armies draw <b>yearly salaries</b> from the treasury. If it runs dry they serve <b>unpaid</b> — clear the debt by the <b>next New Year</b> or they will begin to <b>desert</b>.',
+    { button: { label: 'Got It', fn: function(){ tutHideBanner(); tutAdvance(); } } }); // → build-temples
 }
 
 // ── Step: build a temple via the Gods panel (any owned city, any god) ───────
