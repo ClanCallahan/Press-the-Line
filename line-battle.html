@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Press the Line">
+<meta name="theme-color" content="#0d0a03">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Line Battle</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
 <style>
@@ -671,7 +678,7 @@
   .class-label.general.swirl-cta::before                                     { color:#ffee88; }
   #stance-corner {
     position:absolute; top:8px; left:30px; display:none;
-    flex-direction:column; gap:6px; min-width:200px; z-index:10;
+    flex-direction:column; gap:6px; min-width:200px; max-width:200px; z-index:10;  /* fixed width: long shout text truncates instead of widening the panel */
     background:linear-gradient(160deg,rgba(20,14,4,.78),rgba(10,7,2,.78));
     border:1px solid rgba(201,168,76,.55); border-radius:6px;
     padding:8px 10px 9px;
@@ -753,7 +760,10 @@
     display:flex; justify-content:space-between; align-items:center;
     width:100%;
     position:relative; z-index:3;
-    margin-bottom:-17px;
+    /* -21px centers the 26px medallions on the 10px track: with the column's
+       3px gap, track center sits 8px below the row bottom edge at margin 0;
+       medallion centers sit 13px above it → overlap by 21px to align. */
+    margin-bottom:-21px;
     pointer-events:none;
   }
   #aggression-slot-row span {
@@ -811,20 +821,25 @@
   }
   #aggression-slider {
     -webkit-appearance:none; appearance:none;
-    width:100%; height:10px; border-radius:5px; outline:none; cursor:pointer;
+    /* Narrowed by one medallion width (26px) per side so the thumb's travel
+       ends exactly where it touches the end icons — it can no longer slide
+       behind them. Parent flex column centers the shortened track. */
+    width:calc(100% - 52px); height:10px; border-radius:5px; outline:none; cursor:pointer;
     background:linear-gradient(to right,#3a73c2,#e8c96b 50%,#d4612a);
     border:1px solid #2a1a04;
     box-shadow:inset 0 1px 2px rgba(0,0,0,.6), 0 0 4px rgba(0,0,0,.5);
   }
+  /* Thumb: vertical gilded bar (was a round boss) — reads as a marker on the
+     stance gradient and packs tighter against the end medallions. */
   #aggression-slider::-webkit-slider-thumb {
-    -webkit-appearance:none; width:22px; height:22px; border-radius:50%;
-    background:radial-gradient(circle at 35% 30%,#ffe8a8,#c9a84c 60%,#8b6914);
+    -webkit-appearance:none; width:9px; height:24px; border-radius:3px;
+    background:linear-gradient(90deg,#ffe8a8,#c9a84c 55%,#8b6914);
     border:2px solid #2a1a04; cursor:pointer;
     box-shadow:0 0 6px rgba(255,220,120,.6), 0 2px 4px rgba(0,0,0,.7);
   }
   #aggression-slider::-moz-range-thumb {
-    width:22px; height:22px; border-radius:50%;
-    background:radial-gradient(circle at 35% 30%,#ffe8a8,#c9a84c 60%,#8b6914);
+    width:9px; height:24px; border-radius:3px;
+    background:linear-gradient(90deg,#ffe8a8,#c9a84c 55%,#8b6914);
     border:2px solid #2a1a04; cursor:pointer;
     box-shadow:0 0 6px rgba(255,220,120,.6), 0 2px 4px rgba(0,0,0,.7);
   }
@@ -850,8 +865,14 @@
     border-color:#5a4030; box-shadow:none;
   }
   #shout-btn-text   { display:flex; flex-direction:column; align-items:flex-start; gap:1px; flex:1 1 auto; min-width:0; }
-  #shout-btn-name   { display:none; }  /* name hidden to keep the button narrow; full name remains in the tooltip */
-  #shout-btn-effect { font-size:8.5px; letter-spacing:.3px; color:#d8b888; line-height:1.2; text-align:left; }
+  #shout-btn-name   {   /* just the word "Shout" — the full shout name stays in the tooltip */
+    font-size:11px; font-weight:700; letter-spacing:1px; font-variant:small-caps;
+    color:#fff2d0; line-height:1.1;
+  }
+  #shout-btn-effect {
+    font-size:8.5px; letter-spacing:.3px; color:#d8b888; line-height:1.2; text-align:left;
+    max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;  /* long effect text can never widen the button */
+  }
   #shout-btn-cd     { font-size:10px; font-weight:700; color:#ffcf7a; flex:0 0 auto; }
   #shout-btn-icon   { line-height:0; flex:0 0 auto; }
   #order-wrap { display:flex; flex-direction:column; gap:3px; width:100%; }
@@ -2820,6 +2841,79 @@ const FACTION_DOCTRINE = {
     }
   }
 };
+
+// ─── Doctrine variants: named sub-doctrines + per-battle jitter ─────────────
+// Each battle, every AI-driven side rolls one named variant of its faction
+// doctrine (equal weights), then a small ±DOCTRINE_JITTER_FRAC wobble is
+// applied to the numeric thresholds — so two "Headlong" Persias still aren't
+// identical. Variants override state-machine/flanking thresholds only;
+// placement always uses the faction base (placement variety is a separate,
+// riskier problem). Booleans and startOrder are never jittered. The rolled
+// variant name is logged to the console for debugging.
+const DOCTRINE_JITTER_FRAC = 0.08;  // ±8% multiplicative wobble on numeric thresholds
+const DOCTRINE_VARIANTS = {
+  greece: [
+    { name: 'Steadfast',   // waits for the enemy to bleed; flanks only when dominant
+      sm: { marchAfterArcherFireSec: 8, chargeEnemyStrengthMax: 0.40, chargeOwnStrengthMin: 0.80 },
+      flanking: { activateWhenForceRatioGte: 1.60, cavHpMinForFlank: 0.80 } },
+    { name: 'Measured',    // the faction base, jitter only
+      sm: {}, flanking: {} },
+    { name: 'Audacious',   // presses early, commits cavalry on thinner margins
+      sm: { marchAfterArcherFireSec: 3, chargeEnemyStrengthMax: 0.60, chargeOwnStrengthMin: 0.60 },
+      flanking: { activateWhenForceRatioGte: 1.20, cavHpMinForFlank: 0.55 } }
+  ],
+  persia: [
+    { name: 'Cautious',    // charges later, soaks less arrow fire, spares gutted wings
+      sm: { chargeEnemyStrengthMax: 0.70, chargeOwnStrengthMin: 0.62, fallbackOwnStrengthMax: 0.55, meleeChargeUnderFireSec: 6 },
+      flanking: { cavHpMinForFlank: 0.40 } },
+    { name: 'Imperial',    // the faction base, jitter only
+      sm: {}, flanking: {} },
+    { name: 'Headlong',    // charges on any pretext, ignores its own losses longer
+      sm: { chargeEnemyStrengthMax: 0.95, chargeOwnStrengthMin: 0.38, fallbackOwnStrengthMax: 0.40, meleeChargeUnderFireSec: 1.5 },
+      flanking: {} }
+  ]
+};
+
+let _activeDoctrines = { A: null, B: null };  // per-battle resolved doctrine per team
+
+// ±jitter with clamp. Absent and zero thresholds pass through untouched —
+// zero is doctrine identity (e.g. Persia's always-on flanking), not a value.
+function _jitterVal(v, lo, hi) {
+  if (v == null || v === 0) return v;
+  const w = v * (1 + (Math.random() * 2 - 1) * DOCTRINE_JITTER_FRAC);
+  return Math.max(lo, Math.min(hi, w));
+}
+
+function _resolveDoctrine(side) {
+  const base = FACTION_DOCTRINE[side] || FACTION_DOCTRINE.greece;
+  const pool = DOCTRINE_VARIANTS[side] || [];
+  const v = pool.length ? pool[Math.floor(Math.random() * pool.length)]
+                        : { name: 'Standard', sm: {}, flanking: {} };
+  const sm = Object.assign({}, base.stateMachine, v.sm);
+  const fl = Object.assign({}, base.flanking, v.flanking);
+  sm.chargeEnemyStrengthMax  = _jitterVal(sm.chargeEnemyStrengthMax,  0.25, 0.95);
+  sm.chargeOwnStrengthMin    = _jitterVal(sm.chargeOwnStrengthMin,    0.30, 0.90);
+  sm.fallbackOwnStrengthMax  = _jitterVal(sm.fallbackOwnStrengthMax,  0.25, 0.60);
+  sm.marchAfterArcherFireSec = _jitterVal(sm.marchAfterArcherFireSec, 0,    15);
+  if (sm.meleeChargeUnderFireSec != null)
+    sm.meleeChargeUnderFireSec = _jitterVal(sm.meleeChargeUnderFireSec, 1, 10);
+  fl.activateWhenForceRatioGte = _jitterVal(fl.activateWhenForceRatioGte, 1.0, 2.0);
+  fl.cavHpMinForFlank          = _jitterVal(fl.cavHpMinForFlank,          0,   0.90);
+  return { name: v.name, placement: base.placement, stateMachine: sm, flanking: fl };
+}
+
+// Battle-scoped doctrine accessor for a TEAM ('A' only under AI takeover).
+// Resolves lazily on the first read after each _aiResetState — i.e. once per
+// battle — so every read site in one battle sees the same rolled variant.
+function activeDoctrine(team) {
+  if (!_activeDoctrines[team]) {
+    const side = (team === 'A') ? playerSide : enemySide;
+    _activeDoctrines[team] = _resolveDoctrine(side);
+    try { console.log('[AI] ' + side + ' (team ' + team + ') doctrine: '
+                      + _activeDoctrines[team].name); } catch (e) {}
+  }
+  return _activeDoctrines[team];
+}
 
 // Unit unlock check: used to filter variant selector. A variant is available to
 // a side if it's a "base" unit (not in the unlockable set) or its tech is done.
@@ -9110,6 +9204,11 @@ function setupInput(scene) {
         redrawTrail();
       }
     } else if (phase === 'battle' && battleStarted && !battleOver) {
+      // Stale-gesture rescue (mirror of the draw-stroke rescue above): if the
+      // prior release was lost entirely — neither pointerup nor
+      // pointerupoutside arrived — commit the orphaned battle gesture before
+      // this press starts a new one, so it can't be silently discarded.
+      if (isLassoing || isDrawingMovePath || isDrawingCommand) _commitActiveGestures();
       // Only allow command drawing with a single finger (not pinch-to-zoom)
       if (_activeTouches <= 1) {
         if (moveOrderMode === 'lasso') {
@@ -9203,7 +9302,13 @@ function _commitCurrentStroke() {
   revealBlueLines();
 }
 
-  scene.input.on('pointerup', (pointer) => {
+  // Commit every in-progress gesture — draw stroke, battle lasso, move/line
+  // path, and general command path. Shared by pointerup and pointerupoutside:
+  // releasing outside the canvas doesn't always deliver 'pointerup' to the
+  // scene, which used to silently drop battle gestures (same event-loss class
+  // as the fixed draw-stroke bug — the draw stroke was rescued, the battle
+  // gestures were not).
+  function _commitActiveGestures() {
     if (isDrawing) _commitCurrentStroke();
     if (isLassoing) {
       isLassoing = false;
@@ -9223,11 +9328,14 @@ function _commitCurrentStroke() {
       _pointerDownWorld = null;
       redrawCommandPath();
     }
-  });
+  }
+
+  scene.input.on('pointerup', _commitActiveGestures);
 
   // A release OUTSIDE the canvas doesn't always deliver 'pointerup' to the
-  // scene — commit the in-progress draw stroke when Phaser reports it.
-  scene.input.on('pointerupoutside', () => { if (isDrawing) _commitCurrentStroke(); });
+  // scene — commit ALL in-progress gestures when Phaser reports it, exactly
+  // as a normal release would.
+  scene.input.on('pointerupoutside', _commitActiveGestures);
 
   // ── Pinch zoom (touch) ──
   const canvas = scene.sys.game.canvas;
@@ -9864,7 +9972,8 @@ function updateGeneral(s, nearest, nearDist, allies, dt, time) {
   // selection of nearby troops (a longer-reach / multi-bar general covers more,
   // automatically). When its slotted shout is an enemy debuff that's ready, it
   // edges up to the front of the hot section to catch more foes, fires (via
-  // tickAIShout), then falls back. Friendly-buff shouts fire on cooldown anyway.
+  // tickAIShout), then falls back. Friendly-buff shouts fire once nearby own
+  // troops are under pressure (see the tickAIShout gates).
   if (s.team === 'B') {
     // ── tunables ──
     const GEN_BEHIND        = 55;    // px to sit behind own line (within bar reach so it still buffs the line)
@@ -13108,27 +13217,60 @@ function pickAIShout() {
   slottedShout.B = picked.length ? picked[0] : pool[0];
 }
 
-// Auto-fire the AI's shout whenever it's off cooldown and has a sensible
-// target. Friendly-target shouts always fire; enemy-target shouts fire only if
-// there's an enemy within range of the AI general (avoids wasting the cast).
+// Auto-fire the AI's shout when it's off cooldown AND worth casting — gated
+// on real battlefield triggers instead of firing the instant the cooldown
+// ends:
+//   enemy-target shouts    → ≥ AI_SHOUT_ENEMY_MIN enemies inside the shout radius
+//   friendly-target shouts → ≥ AI_SHOUT_ALLY_MIN own troops inside the radius
+//                            AND under pressure (≥ AI_SHOUT_ENGAGED_MIN of them
+//                            engaged; Heal instead counts wounded troops <70% HP)
+// A patience cap keeps the AI from sitting on a ready shout forever: past
+// AI_SHOUT_PATIENCE_MS after ready, the original relaxed gate applies (any
+// valid target in radius). Gate evaluation is throttled to AI_SHOUT_EVAL_MS
+// so the per-frame call stays cheap while waiting for conditions.
+const AI_SHOUT_ENEMY_MIN   = 5;      // enemy-target: enemies clustered in radius
+const AI_SHOUT_ALLY_MIN    = 5;      // friendly-target: own troops in radius
+const AI_SHOUT_ENGAGED_MIN = 3;      // ...of which at least this many engaged (pressure)
+const AI_SHOUT_WOUNDED_MIN = 3;      // Heal: wounded (<70% max HP) troops in radius
+const AI_SHOUT_PATIENCE_MS = 20000;  // past this, fall back to the relaxed gate
+const AI_SHOUT_EVAL_MS     = 500;    // min interval between gate evaluations
+let _aiShoutLastEval = -99999;
 function tickAIShout() {
   const shoutId = slottedShout.B;
   if (!shoutId || !SHOUTS[shoutId]) return;
-  if (scaledTime < (_shoutReadyAt.B || 0)) return;
+  const readyAt = _shoutReadyAt.B || 0;
+  if (scaledTime < readyAt) return;
+  if (scaledTime - _aiShoutLastEval < AI_SHOUT_EVAL_MS) return;
+  _aiShoutLastEval = scaledTime;
   const gp = _generalPosFor('B');
   if (!gp) return;
   const shout = SHOUTS[shoutId];
-  if (shout.target === 'enemy') {
-    let found = false;
-    for (let i = 0; i < soldiers.length; i++) {
-      const s = soldiers[i];
-      if (!s.alive || s.team === 'B' || s.kind === 'general' || !s.container?.active) continue;
-      const dx = s.container.x - gp.x, dy = s.container.y - gp.y;
-      if (dx * dx + dy * dy <= shout.radius * shout.radius) { found = true; break; }
+  const r2 = shout.radius * shout.radius;
+  let enemies = 0, allies = 0, engaged = 0, wounded = 0;
+  for (let i = 0; i < soldiers.length; i++) {
+    const s = soldiers[i];
+    if (!s.alive || s.kind === 'general' || !s.container?.active) continue;
+    const dx = s.container.x - gp.x, dy = s.container.y - gp.y;
+    if (dx * dx + dy * dy > r2) continue;
+    if (s.team === 'B') {
+      allies++;
+      if (s.isEngaged) engaged++;
+      if ((s.maxHp || 0) > 0 && s.hp < s.maxHp * 0.7) wounded++;
+    } else {
+      enemies++;
     }
-    if (!found) return;
   }
-  fireShout('B');
+  const patient = (scaledTime - readyAt) >= AI_SHOUT_PATIENCE_MS;
+  let fire;
+  if (shout.target === 'enemy') {
+    fire = patient ? enemies >= 1 : enemies >= AI_SHOUT_ENEMY_MIN;
+  } else {
+    const pressure = (shoutId === 'heal')
+      ? wounded >= AI_SHOUT_WOUNDED_MIN
+      : engaged >= AI_SHOUT_ENGAGED_MIN;
+    fire = patient ? allies >= 1 : (allies >= AI_SHOUT_ALLY_MIN && pressure);
+  }
+  if (fire) fireShout('B');
 }
 
 // ── Status-effect icon badges ─────────────────────────────────────────────────
@@ -13805,8 +13947,9 @@ function updateShoutButton() {
   const fxEl   = document.getElementById('shout-btn-effect');
   const cdEl   = document.getElementById('shout-btn-cd');
   if (iconEl) iconEl.innerHTML = _svgBadgeFor(shoutId, 28);
-  if (nameEl) nameEl.textContent = 'Shout: ' + shout.name;
+  if (nameEl) nameEl.textContent = 'Shout';
   if (fxEl)   fxEl.textContent = SHOUT_SHORT[shoutId] || shout.desc;
+  btn.title = shout.name + ' \u2014 ' + shout.desc;  // full name + effect on hover
   const remain = (_shoutReadyAt.A || 0) - scaledTime;
   if (remain > 0) {
     btn.classList.add('cooling');
@@ -13896,7 +14039,8 @@ function advanceSpeedFor(s) {
 // ─── Tactical AI: order state machine + flanking groups ───────────────────
 // Phase 2: enemyOrder is now driven by faction doctrine. Cavalry flanking
 // uses the existing _moveGroup system (the same one player move-orders use).
-// Reads doctrine from FACTION_DOCTRINE[enemySide], modulated by BATTLE_TECH.B.
+// Reads doctrine via activeDoctrine('B') — the per-battle named variant +
+// jitter resolved over FACTION_DOCTRINE[enemySide] — modulated by BATTLE_TECH.B.
 // Tactical-AI tunables (Phase 3: clinch-timed flanking + weak-sector concentration).
 // Real cavalry commits at the clinch (not at t=0) and aims at the enemy's
 // thinnest sector; a melee sub-group can peel off to concentrate on that point.
@@ -13909,6 +14053,26 @@ const AI_WEAK_MIN_UNITS    = 6;     // need at least this many player melee befo
 const AI_PEEL_FRAC         = 0.33;  // #2: max fraction of B melee to peel into a concentration sub-group
 const AI_PEEL_MIN          = 2;     // #2: don't bother peeling fewer than this
 const AI_CONCENTRATE_COOLDOWN_MS = 6000; // #2: min interval between melee weak-sector concentration peels
+const AI_BREACH_GAP_PX      = 110;   // #3: adjacent y-gap in the player melee line that counts as a chain break (~1.7× FORM_SPACING; one dead formation opens ~130px)
+const AI_BREACH_COOLDOWN_MS = 4000;  // #3: min interval between breach exploitation tasks
+const AI_BREACH_RIDE_DEPTH  = 400;   // #3: px past the player melee centroid the breach path rides into the rear
+const AI_GEN_THREAT_R           = 300;  // #4: enemies within this of the AI general = developing threat
+const AI_GEN_THREAT_MIN         = 3;    // #4: count needed at the outer radius to react
+const AI_GEN_THREAT_CLOSE       = 160;  // #4: ANY enemy this close = severe (may recall a flank hook)
+const AI_GEN_SCREEN_DIST        = 120;  // #4: screen forms this far from the general, toward the threat
+const AI_GEN_GUARD_MAX          = 4;    // #4: max cavalry pulled to bodyguard duty per screen
+const AI_GEN_SCREEN_COOLDOWN_MS = 4000; // #4: min interval between screen (re)forms
+const AI_GEN_THREAT_CLEAR_MULT  = 1.3;  // #4: guards release when no enemy remains within R × this
+const AI_BLOCK_THREAT_R    = 450;   // #5: player cavalry within this of a rear asset triggers a blocking line
+const AI_BLOCK_CLEAR_MULT  = 1.3;   // #5: blockers release when no threat remains within R × this
+const AI_BLOCK_DIST        = 140;   // #5: the block forms this far from the asset, toward the threat
+const AI_BLOCK_MAX         = 12;    // #5: hard ceiling on melee peeled to blocking duty
+const AI_BLOCK_MIN         = 2;     // #5: don't bother forming a block with fewer
+const AI_BLOCK_PER_THREAT  = 1.25;  // #5: melee blockers per attacking cavalry (strength-matched sizing)
+const AI_BLOCK_RING_R      = 100;   // #5: radius of the bodyguard ring around the general
+const AI_BLOCK_RING_FULL   = Math.ceil((2 * Math.PI * AI_BLOCK_RING_R) / FORM_SPACING); // slots that close the ring (10 @ R=100)
+const AI_BLOCK_COOLDOWN_MS = 3500;  // #5: min interval between block (re)forms
+const AI_BLOCK_ASSET_MIN_ARCHERS = 3; // #5: ranged mass counts as a protected asset only at this size
 const MELEE_CHASE_LEASH = 150; // px: line members only walk to NON-melee targets within this range while enemy melee remain (both teams)
 const MELEE_RESERVE_STANDOFF = 300; // px from the enemy melee centroid where stood-down surplus melee wait, ready to fill gaps
 let _meleeAlive = { A: 0, B: 0 };     // alive melee per team, published by assignMeleeTargets
@@ -13949,6 +14113,11 @@ let _aiState = {
   reactiveDefenseActive:  false,
   lastMeleeConcentrate:  -999999, // scaledTime of the last melee weak-sector concentration peel (cooldown)
   meleeConcentrateGroup:  null,   // _moveGroup ref for the current concentration peel (for collapse-recall)
+  lastBreach:            -999999, // #3: scaledTime of the last breach exploitation task (cooldown)
+  breachGroup:            null,   // #3: _moveGroup ref for the current breach pour (for collapse-recall)
+  lastGenScreen:         -999999, // #4: scaledTime of the last general-screen (re)form (cooldown)
+  blockGroup:             null,   // #5: slot move-group ref for the current blocking line
+  lastBlockForm:         -999999, // #5: scaledTime of the last block (re)form (cooldown)
   bMeleeLineX:            null,  // cached B melee centroid x (for duel-loss ranged re-form)
   rangedReformBehind:     false, // after a lost ranged duel, B foot archers hug just behind the melee line
   meleeFireStart:         -1,    // scaledTime the exposed melee first took player arrow fire (post-retreat)
@@ -13962,6 +14131,8 @@ let _aiState = {
 let playerLostControl = false;
 
 function _aiResetState() {
+  _activeDoctrines.A = null;   // fresh doctrine variant rolls next read
+  _activeDoctrines.B = null;
   _aiState.initialized            = false;
   _aiState.battleStartTime        = 0;
   _aiState.lastTickFrame          = -999;
@@ -13973,6 +14144,11 @@ function _aiResetState() {
   _aiState.reactiveDefenseActive  = false;
   _aiState.lastMeleeConcentrate   = -999999;
   _aiState.meleeConcentrateGroup  = null;
+  _aiState.lastBreach             = -999999;
+  _aiState.breachGroup            = null;
+  _aiState.lastGenScreen          = -999999;
+  _aiState.blockGroup             = null;
+  _aiState.lastBlockForm          = -999999;
   _aiState.bMeleeLineX            = null;
   _aiState.rangedReformBehind     = false;
   _aiState.meleeFireStart         = -1;
@@ -14094,11 +14270,37 @@ function _aiScanWeakSector() {
   };
 }
 
+// #3 Chain-break detector. The 3-band weak-sector scan can't see a BREAK — a
+// gap smaller than a third of the line span just dilutes one band's strength.
+// This finds it directly: sort player melee y-centers, take the largest
+// adjacent gap; past AI_BREACH_GAP_PX (formations sit FORM_SPACING=65px apart,
+// so one dead formation opens ~130px) that's a breach with a concrete y.
+// Uses ALL player melee, like the scan — a rear reserve sitting at the gap y
+// genuinely contests the breach, so it shouldn't register as open.
+// Validated in breach_harness.js.
+function _aiScanBreach() {
+  const ys = [];
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'A' || s.kind !== 'melee') continue;
+    ys.push(s.container.y);
+  }
+  if (ys.length < AI_WEAK_MIN_UNITS) return null;
+  ys.sort(function(a, b) { return a - b; });
+  let best = 0, bestY = 0;
+  for (let i = 1; i < ys.length; i++) {
+    const g = ys[i] - ys[i - 1];
+    if (g > best) { best = g; bestY = (ys[i] + ys[i - 1]) / 2; }
+  }
+  if (best < AI_BREACH_GAP_PX) return null;
+  return { gapY: Math.round(bestY), gapPx: Math.round(best) };
+}
+
 // Decide enemyOrder for this tick. Doctrine-driven, with hysteresis to avoid
 // flicker. Tech effects shift thresholds: high damage → more aggressive
 // (charge sooner); high armor → more willing to advance (lower fallback).
 function _aiUpdateOrder(state, time) {
-  const sm = (FACTION_DOCTRINE[enemySide] || FACTION_DOCTRINE.greece).stateMachine;
+  const sm = activeDoctrine('B').stateMachine;
   if (time - _aiState.lastOrderChange < 1500) return;  // 1.5s hysteresis
 
   const own  = state.ownStrengthFrac;
@@ -14138,7 +14340,7 @@ function _aiUpdateOrder(state, time) {
 // targets globalOrder. Uses lastOrderChangeA hysteresis tracker so it
 // can flip independently from B's order updates.
 function _aiUpdateOrderForA(state, time) {
-  const sm = (FACTION_DOCTRINE[playerSide] || FACTION_DOCTRINE.greece).stateMachine;
+  const sm = activeDoctrine('A').stateMachine;
   if (time - _aiState.lastOrderChangeA < 1500) return;
 
   // Strength fractions FROM TEAM A's PERSPECTIVE — flip own/enemy from
@@ -14285,7 +14487,7 @@ function _aiInitFlanking() { /* clinch-gated: see _aiManageFlanks primary launch
 // reactive defense (Greek intercepting player flanks), and recall for
 // flank groups that have lost too many troops to be effective.
 function _aiManageFlanks(state, time) {
-  const flanking = (FACTION_DOCTRINE[enemySide] || FACTION_DOCTRINE.greece).flanking;
+  const flanking = activeDoctrine('B').flanking;
   const tech = BATTLE_TECH.B || {};
   const speedTechActive = (tech.speedCavalry || 0) >= 15;
 
@@ -14317,6 +14519,7 @@ function _aiManageFlanks(state, time) {
         if (horseArcher && !_aiState.rangedReformBehind) continue;
         cavHp += s.hp || 0; cavMaxHp += s.maxHp || s.hp || 1;
         if (s._moveGroup || s.isEngaged || s.isRouting) continue;   // busy → not free
+        if (s._genGuard) continue;                                  // #4: posted bodyguards stay put
         allCav.push(s);
         if (s.container.y < H / 2 - 100)      topCav.push(s);
         else if (s.container.y > H / 2 + 100) botCav.push(s);
@@ -14373,6 +14576,7 @@ function _aiManageFlanks(state, time) {
         if (!s.alive || !s.container?.active) continue;
         if (s.team !== 'B' || s.kind !== 'cavalry') continue;
         if (s._moveGroup) continue;
+        if (s._genGuard) continue;   // #4: posted bodyguards stay put
         available.push(s);
       }
       if (available.length > 0) {
@@ -14399,6 +14603,401 @@ function _aiManageFlanks(state, time) {
     const frac = maxHp > 0 ? hp / maxHp : 1;
     if (frac < 0.35) mg.path.length = 0;  // abandon mission
   });
+}
+
+// #4 Shield the general. When player units close on the AI general, pull free
+// cavalry into a screen between the threat and the general. Two tiers:
+// developing (≥ AI_GEN_THREAT_MIN enemies inside AI_GEN_THREAT_R) uses only
+// FREE cavalry; severe (any enemy inside AI_GEN_THREAT_CLOSE) may also recall
+// the NEARER committed flank hook to guard duty — but only then, so a single
+// cheap probe can't bait the whole flanking system off its objectives.
+// Guards are flagged (s._genGuard) so flank/breach tasking leaves them alone;
+// the screen re-forms on a cooldown while the threat persists (releasing and
+// re-picking, so it tracks a moving threat), and everything releases back to
+// doctrine once no enemy remains within the clear radius.
+function _aiReleaseGenGuards() {
+  for (const s of soldiers) {
+    if (!s._genGuard) continue;
+    s._genGuard = false;
+    if (s._moveGroup && s._moveGroup._genScreen) {   // still riding to the screen point
+      if (s._moveGroup.soldiers) s._moveGroup.soldiers.delete(s);
+      s._moveGroup = null;
+      s._movePathIdx = 0;
+    }
+    if (s._orderOverride === 'hold') s._orderOverride = null;  // resume doctrine
+  }
+}
+
+function _aiShieldGeneral(state, time) {
+  const gp = _generalPosFor('B');
+  if (!gp) { _aiReleaseGenGuards(); return; }   // general dead → nothing to guard
+
+  // Threat sweep around the general. nClear uses the wider release radius so
+  // guards don't flicker on/off at the exact threat boundary.
+  let n = 0, cx = 0, cy = 0, nearest = Infinity, nClear = 0;
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'A' || s.kind === 'general') continue;
+    const d = Math.hypot(s.container.x - gp.x, s.container.y - gp.y);
+    if (d <= AI_GEN_THREAT_R) { n++; cx += s.container.x; cy += s.container.y; if (d < nearest) nearest = d; }
+    if (d <= AI_GEN_THREAT_R * AI_GEN_THREAT_CLEAR_MULT) nClear++;
+  }
+  if (nClear === 0) { _aiReleaseGenGuards(); return; }         // threat gone → stand down
+
+  const severe = nearest <= AI_GEN_THREAT_CLOSE;
+  if (n < AI_GEN_THREAT_MIN && !severe) return;
+  if (time - _aiState.lastGenScreen < AI_GEN_SCREEN_COOLDOWN_MS) return;
+
+  // Re-form: release posted guards first so they're re-pickable — the screen
+  // tracks the threat's current direction instead of holding a stale bearing.
+  _aiReleaseGenGuards();
+
+  cx /= n; cy /= n;
+  let vx = cx - gp.x, vy = cy - gp.y;
+  const vl = Math.hypot(vx, vy) || 1;
+  const px = Math.max(300, Math.min(W - 300, gp.x + (vx / vl) * AI_GEN_SCREEN_DIST));
+  const py = Math.max(280, Math.min(H - 280, gp.y + (vy / vl) * AI_GEN_SCREEN_DIST));
+
+  // Gather FREE cavalry (skirmishing horse archers keep skirmishing, same rule
+  // as flank tasking).
+  const free = [];
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'B' || s.kind !== 'cavalry') continue;
+    const horseArcher = (s.hasBow || s.hasJavelin) && !s.firesInMelee;
+    if (horseArcher && !_aiState.rangedReformBehind) continue;
+    if (s._moveGroup || s.isEngaged || s.isRouting) continue;
+    free.push(s);
+  }
+  let picks = free;
+
+  // Severe tier with nothing free: recall the NEARER flank hook to guard duty.
+  if (!picks.length && severe) {
+    let bestSoldiers = null, bestD = Infinity;
+    ['top', 'bottom'].forEach(function(side) {
+      const mg = _aiState.flankGroups[side];
+      if (!mg || !mg.soldiers) return;
+      let sx = 0, sy = 0, sn = 0;
+      const members = [];
+      for (const s of mg.soldiers) {
+        if (!s.alive || !s.container?.active || s.isEngaged || s.isRouting) continue;
+        sx += s.container.x; sy += s.container.y; sn++;
+        members.push(s);
+      }
+      if (!sn) return;
+      const d = Math.hypot(sx / sn - gp.x, sy / sn - gp.y);
+      if (d < bestD) { bestD = d; bestSoldiers = members; }
+    });
+    if (bestSoldiers) picks = bestSoldiers;
+  }
+  if (!picks.length) return;
+
+  // Nearest guards first, capped so bodyguard duty never soaks the whole wing.
+  picks.sort(function(a, b) {
+    return Math.hypot(a.container.x - gp.x, a.container.y - gp.y)
+         - Math.hypot(b.container.x - gp.x, b.container.y - gp.y);
+  });
+  picks = picks.slice(0, AI_GEN_GUARD_MAX);
+
+  const g = _aiAssignMoveGroup(picks, [{ x: px, y: py }]);
+  if (g) { g.holdAtEnd = true; g._genScreen = true; }   // hold the screen on arrival
+  for (const s of picks) s._genGuard = true;
+  _aiState.lastGenScreen = time;
+}
+
+// #3 Breakthrough exploitation. When the player's melee chain BREAKS (see
+// _aiScanBreach), pour the nearest free reserves — rear-rank melee AND free
+// cavalry — THROUGH the gap into the player's rear, instead of tidily
+// reinforcing the contact line. Path waypoint 1 lines the pour up with the gap
+// on the AI's own side; waypoint 2 rides through past the player melee
+// centroid. Melee that brush the gap shoulders engage and fight there
+// (widening the break); whatever passes clean finishes in the rear on a
+// 'charge' override and rolls up ranged/general. Collapse-recalled and
+// cooldown-throttled like the flank hooks.
+function _aiManageBreach(state, time) {
+  // Collapse-recall: abandon a gutted pour (runs every tick, cooldown or not).
+  const bg = _aiState.breachGroup;
+  if (bg && bg.path && bg.path.length) {
+    let hp = 0, maxHp = 0, alive = 0;
+    for (const s of bg.soldiers) {
+      if (!s.alive) continue;
+      hp += s.hp || 0; maxHp += s.maxHp || s.hp || 1; alive++;
+    }
+    if (alive === 0 || (maxHp > 0 && hp / maxHp < 0.35)) bg.path.length = 0;
+  }
+
+  const clinched = state.bMeleeEngagedFrac >= AI_CLINCH_FRAC &&
+                   state.aMeleeEngagedFrac >= AI_CLINCH_FRAC;
+  if (!clinched) return;
+  if ((time - _aiState.lastBreach) < AI_BREACH_COOLDOWN_MS) return;
+
+  const breach = _aiScanBreach();
+  if (!breach) return;
+
+  // Gather FREE reserves: rear-rank melee (capped like the #2 peel) plus free
+  // cavalry (the natural exploitation arm — no cap). Guards stay guarding;
+  // skirmishing horse archers keep skirmishing.
+  let totalMelee = 0;
+  const freeMelee = [], freeCav = [];
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active || s.team !== 'B') continue;
+    if (s.kind === 'melee') totalMelee++;
+    else if (s.kind !== 'cavalry') continue;
+    if (s.isEngaged || s.isRouting || s._moveGroup || s._genGuard) continue;
+    if (s.kind === 'cavalry') {
+      const horseArcher = (s.hasBow || s.hasJavelin) && !s.firesInMelee;
+      if (horseArcher && !_aiState.rangedReformBehind) continue;
+      freeCav.push(s);
+    } else {
+      freeMelee.push(s);
+    }
+  }
+  freeMelee.sort(function(a, b) {
+    return Math.abs(a.container.y - breach.gapY) - Math.abs(b.container.y - breach.gapY);
+  });
+  const cap   = Math.max(AI_PEEL_MIN, Math.floor(totalMelee * AI_PEEL_FRAC));
+  const picks = freeMelee.slice(0, cap).concat(freeCav);
+  if (picks.length < AI_PEEL_MIN) return;
+
+  const gapY     = Math.max(280, Math.min(H - 280, breach.gapY));
+  const contactX = state.aMeleeCount > 0
+    ? Math.round((state.aMx + state.bMx) / 2)
+    : (NO_MAN_X1 - 100);
+  const rearX = Math.max(400, Math.round(
+    (state.aMeleeCount > 0 ? state.aMx : NO_MAN_X1) - AI_BREACH_RIDE_DEPTH));
+  const path = [
+    { x: Math.max(300, Math.min(W - 300, contactX + 60)), y: gapY },  // line up with the gap on own side
+    { x: rearX,                                            y: gapY }  // pour THROUGH into the rear
+  ];
+  _aiState.breachGroup = _aiAssignMoveGroup(picks, path);
+  _aiState.lastBreach  = time;
+  // Give the pour room: hold the ordinary weak-sector peel for a beat so it
+  // can't double-commit reserves at the same y this tick.
+  _aiState.lastMeleeConcentrate = Math.max(_aiState.lastMeleeConcentrate, time);
+}
+
+// #5 Blocking line. When player cavalry rides for the AI's rear assets (the
+// general, or the ranged mass), FREE rear-half melee actively form a short
+// line between the flanker and the asset — replacing the shipped behavior
+// where leashed line members just stood at the leash edge while the raid went
+// past. Reuses the player's form-line slot machinery (getMoveTarget /
+// _advanceMoveGroupPaths handle mg.slots groups team-agnostically; the
+// overlay renderer already hides _aiOwned groups). Guard rails, in order of
+// the failures they prevent: front-half and engaged melee are never eligible
+// (forming the block can't tear a hole in the AI's own line), the peel is
+// hard-capped at AI_BLOCK_MAX, re-forms are cooldown-throttled, and the
+// slot assignment is a minimum-total-distance matching so approach paths
+// can't cross and tangle. Geometry + matching validated in block_harness.js.
+function _aiBlockSlotsFor(threat, asset, k) {
+  let vx = threat.x - asset.x, vy = threat.y - asset.y;
+  const vl = Math.hypot(vx, vy);
+  if (vl < 1) { vx = -1; vy = 0; }             // degenerate: face the player side
+  else        { vx /= vl; vy /= vl; }
+  const px = asset.x + vx * AI_BLOCK_DIST;     // standoff point on the threat→asset axis
+  const py = asset.y + vy * AI_BLOCK_DIST;
+  const nx = -vy, ny = vx;                     // line runs along the perpendicular
+  const facing = Math.atan2(threat.y - py, threat.x - px);
+  const slots = [];
+  for (let i = 0; i < k; i++) {
+    const off = (i - (k - 1) / 2) * FORM_SPACING;
+    slots.push({
+      x: Math.max(300, Math.min(W - 300, px + nx * off)),
+      y: Math.max(280, Math.min(H - 280, py + ny * off)),
+      facing: facing
+    });
+  }
+  return { slots: slots, p: { x: px, y: py } };
+}
+
+// #5 Ring/arc slots around the general: slots sit on a circle of radius
+// AI_BLOCK_RING_R, centered on the threat bearing and facing radially
+// outward. At k ≥ AI_BLOCK_RING_FULL the arc closes into an evenly spaced
+// full ring — "enclose the general where possible"; with fewer troops it's
+// an arc covering the threatened sector. Validated in block_harness.js.
+function _aiRingSlotsFor(threat, center, k) {
+  let dx = threat.x - center.x, dy = threat.y - center.y;
+  if (Math.hypot(dx, dy) < 1) { dx = -1; dy = 0; }   // degenerate: face the player side
+  const ang0 = Math.atan2(dy, dx);
+  const slots = [];
+  if (k >= AI_BLOCK_RING_FULL) {
+    for (let i = 0; i < k; i++) {                    // closed ring, even spacing
+      const a = ang0 + (i * 2 * Math.PI) / k;
+      slots.push({ x: Math.max(300, Math.min(W - 300, center.x + Math.cos(a) * AI_BLOCK_RING_R)),
+                   y: Math.max(280, Math.min(H - 280, center.y + Math.sin(a) * AI_BLOCK_RING_R)),
+                   facing: a });
+    }
+  } else {
+    const step = FORM_SPACING / AI_BLOCK_RING_R;     // radians between arc slots
+    for (let i = 0; i < k; i++) {
+      const a = ang0 + (i - (k - 1) / 2) * step;
+      slots.push({ x: Math.max(300, Math.min(W - 300, center.x + Math.cos(a) * AI_BLOCK_RING_R)),
+                   y: Math.max(280, Math.min(H - 280, center.y + Math.sin(a) * AI_BLOCK_RING_R)),
+                   facing: a });
+    }
+  }
+  return { slots: slots,
+           p: { x: center.x + Math.cos(ang0) * AI_BLOCK_RING_R,
+                y: center.y + Math.sin(ang0) * AI_BLOCK_RING_R } };
+}
+
+// #5 Hungarian assignment (e-maxx form, O(k³)): exact minimum-total-distance
+// unit→slot matching — optimal Euclidean matching is provably non-crossing,
+// and unlike the 4!-permutation brute force this stays exact at k = 12
+// (~0.03ms per match in the harness). cost[i][j] = dist(unit i, slot j),
+// square k×k. Returns match[unitIdx] = slotIdx. Validated against brute
+// force in block_harness.js.
+function _aiMinCostMatch(cost) {
+  const n = cost.length;
+  const u = new Array(n + 1).fill(0), v = new Array(n + 1).fill(0);
+  const p = new Array(n + 1).fill(0), way = new Array(n + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    p[0] = i;
+    let j0 = 0;
+    const minv = new Array(n + 1).fill(Infinity);
+    const used = new Array(n + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = p[j0];
+      let delta = Infinity, j1 = -1;
+      for (let j = 1; j <= n; j++) if (!used[j]) {
+        const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+        if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+        if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+      }
+      for (let j = 0; j <= n; j++) {
+        if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
+        else minv[j] -= delta;
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do { const j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
+  }
+  const match = new Array(n);
+  for (let j = 1; j <= n; j++) if (p[j] > 0) match[p[j] - 1] = j - 1;
+  return match;
+}
+
+function _aiReleaseBlockers() {
+  const g = _aiState.blockGroup;
+  if (!g) return;
+  for (const s of g.soldiers) {
+    if (s._moveGroup === g) { s._moveGroup = null; s._movePathIdx = 0; }
+    s._lineDone = false;
+    // Rejoin the fight rather than fossilize on a stale bearing (mirrors
+    // _leaveMoveOrder semantics for finished AI orders).
+    if (s._orderOverride === 'hold') s._orderOverride = 'charge';
+  }
+  g.soldiers.clear();
+  _aiState.blockGroup = null;
+}
+
+function _aiManageBlockingLine(state, time) {
+  // Protected assets: the AI general, and the ranged mass while it's still a mass.
+  const assets = [];
+  const gp = _generalPosFor('B');
+  if (gp) assets.push({ x: gp.x, y: gp.y, isGeneral: true });
+  let ax = 0, ay = 0, an = 0;
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'B' || s.kind !== 'archer') continue;
+    ax += s.container.x; ay += s.container.y; an++;
+  }
+  if (an >= AI_BLOCK_ASSET_MIN_ARCHERS) assets.push({ x: ax / an, y: ay / an });
+  if (!assets.length) { _aiReleaseBlockers(); return; }
+
+  // Threat sweep: player cavalry near any asset. nClear counts the wider
+  // release radius so the block doesn't flicker at the trigger boundary.
+  const aCav = [];
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'A' || s.kind !== 'cavalry') continue;
+    aCav.push(s);
+  }
+  let nClear = 0, bestAsset = null, bestThreatD = Infinity;
+  for (const asset of assets) {
+    for (const c of aCav) {
+      const d = Math.hypot(c.container.x - asset.x, c.container.y - asset.y);
+      if (d <= AI_BLOCK_THREAT_R * AI_BLOCK_CLEAR_MULT) nClear++;
+      if (d <= AI_BLOCK_THREAT_R && d < bestThreatD) { bestThreatD = d; bestAsset = asset; }
+    }
+  }
+  if (nClear === 0) { _aiReleaseBlockers(); return; }   // threat gone → stand down
+  if (!bestAsset) return;                               // lingering at the outer ring → hold as posted
+  if (time - _aiState.lastBlockForm < AI_BLOCK_COOLDOWN_MS) return;
+
+  // Threat point: centroid of the riders actually inside the ring of the
+  // chosen asset (tracks multi-prong raids better than the nearest rider).
+  let tx = 0, ty = 0, tn = 0;
+  for (const c of aCav) {
+    const d = Math.hypot(c.container.x - bestAsset.x, c.container.y - bestAsset.y);
+    if (d <= AI_BLOCK_THREAT_R) { tx += c.container.x; ty += c.container.y; tn++; }
+  }
+  if (!tn) return;
+  const threatPt = { x: tx / tn, y: ty / tn };
+
+  // Re-form: release posted blockers first so they're re-pickable — the block
+  // tracks the raid's current direction instead of holding a stale bearing.
+  _aiReleaseBlockers();
+
+  // Eligible: FREE rear-half melee only. Front-half units stay in the line.
+  const elig = [];
+  for (const s of soldiers) {
+    if (!s.alive || !s.container?.active) continue;
+    if (s.team !== 'B' || s.kind !== 'melee') continue;
+    if (s.isEngaged || s.isRouting || s._moveGroup) continue;
+    if (state.bMeleeCount > 0 && s.container.x < state.bMx) continue;
+    elig.push(s);
+  }
+  if (elig.length < AI_BLOCK_MIN) return;
+
+  // Strength-matched sizing: blockers scale with the attacking cavalry count
+  // (tn riders inside the ring), clamped to [AI_BLOCK_MIN, AI_BLOCK_MAX] and
+  // to what's actually free. Around the general the ring never overpacks —
+  // AI_BLOCK_RING_FULL already fully encloses him.
+  let k = Math.max(AI_BLOCK_MIN, Math.round(tn * AI_BLOCK_PER_THREAT));
+  k = Math.min(k, AI_BLOCK_MAX, elig.length);
+  if (bestAsset.isGeneral) k = Math.min(k, AI_BLOCK_RING_FULL);
+
+  // Geometry: an arc/ring AROUND the general ("enclose where possible" — it
+  // closes into a full ring when k reaches AI_BLOCK_RING_FULL); a standoff
+  // line IN FRONT of the ranged mass.
+  const geo = bestAsset.isGeneral
+    ? _aiRingSlotsFor(threatPt, bestAsset, k)
+    : _aiBlockSlotsFor(threatPt, bestAsset, k);
+  elig.sort(function(a, b) {
+    return Math.hypot(a.container.x - geo.p.x, a.container.y - geo.p.y)
+         - Math.hypot(b.container.x - geo.p.x, b.container.y - geo.p.y);
+  });
+  const picks = elig.slice(0, k);
+
+  // Exact minimum-total-distance matching via the Hungarian algorithm —
+  // provably non-crossing at any k (see _aiMinCostMatch).
+  const cost = [];
+  for (let i = 0; i < k; i++) {
+    cost.push([]);
+    for (let j = 0; j < k; j++) {
+      const sl = geo.slots[j];
+      cost[i].push(Math.hypot(picks[i].container.x - sl.x, picks[i].container.y - sl.y));
+    }
+  }
+  const match = _aiMinCostMatch(cost);
+
+  const mg = { soldiers: new Set(picks), slots: new Map(),
+               _formLine: true, _aiOwned: true, _aiBlock: true, size: picks.length };
+  for (let i = 0; i < k; i++) {
+    const s  = picks[i];
+    const sl = geo.slots[match[i]];
+    mg.slots.set(s, { x: sl.x, y: sl.y, facing: sl.facing });
+    if (s._moveGroup && s._moveGroup.soldiers) s._moveGroup.soldiers.delete(s);
+    s._moveGroup = mg;
+    s._movePathIdx = 0;
+    s._lineDone = false;
+    s._orderOverride = null;
+    s.isFollowing = false;
+    _detachFromLine(s);
+  }
+  _aiState.blockGroup    = mg;
+  _aiState.lastBlockForm = time;
 }
 
 // #2 Concentration of force. When the player line has a CLEAR weak sector, peel
@@ -14467,7 +15066,7 @@ function _aiManageMeleeConcentration(state, time) {
 // keeps the heavy work to once per tacticalTickFrames frames.
 function tickEnemyAI(time) {
   if (!battleStarted || battleOver) return;
-  const sm = (FACTION_DOCTRINE[enemySide] || FACTION_DOCTRINE.greece).stateMachine;
+  const sm = activeDoctrine('B').stateMachine;
   // First-tick init: snapshot start time and launch doctrinal flanks
   if (!_aiState.initialized) {
     _aiState.initialized     = true;
@@ -14481,7 +15080,10 @@ function tickEnemyAI(time) {
 
   const state = _aiComputeBattleState(time);
   _aiState.bMeleeLineX = state.bMeleeCount > 0 ? state.bMx : null;
+  _aiShieldGeneral(state, time);        // #4: defense grabs cavalry before offense does
   _aiManageFlanks(state, time);
+  _aiManageBlockingLine(state, time);   // #5: infantry backstop for rear assets — defense claims melee before offense
+  _aiManageBreach(state, time);         // #3: breach pour pre-empts the ordinary peel
   _aiManageMeleeConcentration(state, time);
 
   // Skirmish doctrine: while the AI's ranged screen forward, the melee line

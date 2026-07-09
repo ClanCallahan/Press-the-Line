@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Press the Line">
+<meta name="theme-color" content="#0d0a03">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Ancient World</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
 <style>
@@ -431,6 +438,7 @@ body.ptl-tut-gated #save-btn{ display:none; }   /* hidden until the tutorial end
 #save-panel .sp-card{ width:min(92vw,440px); max-height:86vh; overflow:auto; background:linear-gradient(180deg,#1a1306,#0d0a03); border:2px solid #c9a84c; border-radius:8px; padding:18px 18px 14px; box-shadow:0 0 40px rgba(0,0,0,.7), inset 0 0 0 1px rgba(201,168,76,.2); color:#e8d8a8; }
 #save-panel h2{ margin:0 0 4px; font-family:'Cinzel',Georgia,serif; font-size:17px; letter-spacing:3px; color:#f0d870; text-align:center; text-shadow:0 0 14px rgba(201,168,76,.7); }
 #save-panel .sp-sub{ text-align:center; font-size:10px; letter-spacing:1px; color:#9a8550; margin-bottom:14px; font-family:Georgia,serif; }
+#sp-mobile-note{ font-size:10px; line-height:1.55; color:#c9a84c; background:rgba(201,168,76,.08); border:1px solid rgba(201,168,76,.35); border-radius:5px; padding:7px 9px; margin:0 0 12px; font-family:Georgia,serif; }
 .sp-slot{ border:1px solid rgba(201,168,76,.35); border-radius:6px; padding:10px 12px; margin:9px 0; background:rgba(201,168,76,.05); }
 .sp-slot .sp-title{ font-family:'Cinzel',Georgia,serif; font-size:13px; letter-spacing:1px; color:#f0d870; }
 .sp-slot .sp-meta{ font-family:Georgia,serif; font-size:10px; color:#9a8550; margin-top:2px; min-height:12px; }
@@ -12727,6 +12735,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
   <div class="sp-card">
     <h2>Campaign Saves</h2>
     <div class="sp-sub">Stored in this browser · export a file to back up or move a save</div>
+    <div id="sp-mobile-note" style="display:none">&#9888; Mobile browsers can erase saved games after ~7 days without a visit. <b>Export</b> your saves to files to keep them safe &mdash; or add this game to your home screen, which protects its storage (the installed app starts with its own empty storage, so use Export/Import to carry a save over).</div>
     <div id="sp-slots"></div>
     <button class="sp-close" onclick="window.closeSavePanel && window.closeSavePanel()">Close</button>
   </div>
@@ -14694,6 +14703,14 @@ function ptlExportSave(id) {
   }
   window.openSavePanel=function(){ render(); var p=document.getElementById('save-panel'); if(p) p.style.display='flex'; };
   window.closeSavePanel=function(){ var p=document.getElementById('save-panel'); if(p) p.style.display='none'; };
+  // Mobile storage warning: shown on touch devices only — desktop browsers
+  // don't idle-purge localStorage the way iOS Safari's 7-day ITP cap does.
+  try {
+    if ((window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window) {
+      var _mn = document.getElementById('sp-mobile-note');
+      if (_mn) _mn.style.display = 'block';
+    }
+  } catch (e) {}
   var _fi=document.getElementById('sp-import-file');
   if(_fi) _fi.addEventListener('change', function(){
     var f=this.files&&this.files[0]; if(!f||!_spImportTarget) return;
