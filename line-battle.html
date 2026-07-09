@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Press the Line">
 <meta name="theme-color" content="#0d0a03">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <title>Line Battle</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
 <style>
@@ -1509,6 +1509,21 @@ body.preview-mode, body.preview-mode html { background:#000 !important; }
 </div>
 
 <script>
+// Wrong-page install guard: iOS ignores manifest start_url, so a home-screen
+// install captures whatever page it was added from. A cold standalone launch
+// straight into this page would silently start a default campaign (every
+// session var falls back to a default). playerSide is set by every legitimate
+// entry path (startGame and ptlRestoreSnapshot both write it), so its absence
+// in a standalone session means a cold launch: bounce to the title screen.
+// Normal browser tabs are unaffected.
+try {
+  var _ptlStandalone = (navigator.standalone === true) ||
+      (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  if (_ptlStandalone && !sessionStorage.getItem('playerSide')) {
+    location.replace('index.html');
+  }
+} catch (e) {}
+
 // ═══ CONSTANTS ════════════════════════════════════════════════════════════════
 const VIEW_W = 960, VIEW_H = 600;
 const W = 6222, H = 4800;            // world size (+50% over prior 4148x3200)
