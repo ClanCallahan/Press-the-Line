@@ -16,6 +16,12 @@ html,body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;us
 input,textarea,[contenteditable],#dev-output{-webkit-user-select:text;-moz-user-select:text;-ms-user-select:text;user-select:text;-webkit-touch-callout:default;}
 html,body{width:100%;height:100%;overflow:hidden;background:#0d1f35;font-family:Georgia,serif;}
 #map{width:100%;height:100%;}
+/* Chrome hairline tile-seam fix: at fractional zoom levels (zoomSnap 0.2)
+   Chrome's GPU tile scaling leaves sub-pixel gaps between tiles, showing as a
+   grid of seam lines (other browsers round differently and don't). Oversizing
+   each 256px tile by half a pixel makes neighbors overlap; the 0.2% stretch is
+   imperceptible on satellite imagery. !important beats Leaflet's inline size. */
+.leaflet-tile-container img.leaflet-tile{width:256.5px!important;height:256.5px!important;}
 #title-bar{position:fixed;top:0;left:0;right:0;z-index:999;padding:9px 16px 13px;background:linear-gradient(180deg,rgba(4,10,20,.94)0%,transparent 100%);color:#c9a84c;font-size:clamp(15px,3.5vw,26px);letter-spacing:4px;text-align:center;font-variant:small-caps;text-shadow:0 0 24px rgba(201,168,76,.5),0 2px 4px rgba(0,0,0,.9);pointer-events:none;}
 #title-bar .sub1{font-size:.6em;letter-spacing:5px;color:#7a6028;display:block;margin-top:2px;}
 #title-bar .sub2{font-size:1em;letter-spacing:5px;color:#c9a84c;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px;}
@@ -433,7 +439,16 @@ body.ptl-tut-gated #save-btn{ display:none; }   /* hidden until the tutorial end
 #save-panel .sp-card{ width:min(92vw,440px); max-height:86vh; overflow:auto; background:linear-gradient(180deg,#1a1306,#0d0a03); border:2px solid #c9a84c; border-radius:8px; padding:18px 18px 14px; box-shadow:0 0 40px rgba(0,0,0,.7), inset 0 0 0 1px rgba(201,168,76,.2); color:#e8d8a8; }
 #save-panel h2{ margin:0 0 4px; font-family:'Cinzel',Georgia,serif; font-size:17px; letter-spacing:3px; color:#f0d870; text-align:center; text-shadow:0 0 14px rgba(201,168,76,.7); }
 #save-panel .sp-sub{ text-align:center; font-size:10px; letter-spacing:1px; color:#9a8550; margin-bottom:14px; font-family:Georgia,serif; }
-#sp-mobile-note{ font-size:10px; line-height:1.55; color:#c9a84c; background:rgba(201,168,76,.08); border:1px solid rgba(201,168,76,.35); border-radius:5px; padding:7px 9px; margin:0 0 12px; font-family:Georgia,serif; }
+#sp-mobile-note{ display:none; align-items:center; gap:9px; font-size:10.5px; line-height:1.5; color:#c9a84c; background:rgba(201,168,76,.08); border:1px solid rgba(201,168,76,.35); border-radius:5px; padding:7px 9px; margin:0 0 12px; font-family:Georgia,serif; }
+#sp-mobile-note span{ flex:1 1 auto; }
+#sp-learn-btn{ flex:0 0 auto; background:linear-gradient(180deg,rgba(201,168,76,.28),rgba(201,168,76,.14)); border:1px solid rgba(201,168,76,.6); border-radius:4px; color:#ffe9b0; font:700 10px Georgia,serif; letter-spacing:.5px; padding:5px 9px; cursor:pointer; white-space:nowrap; }
+#sp-learn-overlay{ display:none; position:fixed; inset:0; z-index:100000; align-items:center; justify-content:center; background:rgba(0,0,0,.65); }
+#sp-learn-overlay.open{ display:flex; }
+#sp-learn-box{ max-width:min(92vw,460px); max-height:84vh; overflow-y:auto; background:linear-gradient(180deg,rgba(26,19,6,.98),rgba(10,7,2,.98)); border:1px solid rgba(201,168,76,.55); border-radius:8px; padding:15px 17px 13px; color:#e8d8a8; font-family:Georgia,serif; font-size:12px; line-height:1.6; box-shadow:0 6px 30px rgba(0,0,0,.75); }
+#sp-learn-box h3{ margin:0 0 9px; font-size:14px; letter-spacing:2px; font-variant:small-caps; color:#c9a84c; text-align:center; }
+#sp-learn-box p{ margin:0 0 10px; }
+#sp-learn-box b{ color:#ffe9b0; }
+#sp-learn-close{ display:block; margin:4px auto 0; background:linear-gradient(180deg,rgba(201,168,76,.28),rgba(201,168,76,.14)); border:1px solid rgba(201,168,76,.6); border-radius:4px; color:#ffe9b0; font:700 11px Georgia,serif; letter-spacing:1px; padding:6px 22px; cursor:pointer; }
 .sp-slot{ border:1px solid rgba(201,168,76,.35); border-radius:6px; padding:10px 12px; margin:9px 0; background:rgba(201,168,76,.05); }
 .sp-slot .sp-title{ font-family:'Cinzel',Georgia,serif; font-size:13px; letter-spacing:1px; color:#f0d870; }
 .sp-slot .sp-meta{ font-family:Georgia,serif; font-size:10px; color:#9a8550; margin-top:2px; min-height:12px; }
@@ -1527,14 +1542,44 @@ function troopIconSVG(sub, px) {
   // Keep the vector draw-window (roads/routes) tracking the pan so they don't
   // clip at the screen edge mid-drag. Renderer._update only repositions the
   // window (it does NOT re-project the roads), so it's cheap; throttled to ~8×/s.
+  // CRITICAL: never run it mid-zoom. During a pinch/animated zoom, Leaflet
+  // scales the SVG container with a CSS transform (leaflet-zoom-animated);
+  // _update() calls DomUtil.setPosition on that container, REPLACING the
+  // scale transform — which froze roads/supply lines in place until the
+  // gesture released while tiles and city markers glided. _zoomFreeze spans
+  // zoomstart → shortly after zoomend, and Leaflet's own zoomend handling
+  // re-projects the vectors, so skipping here loses nothing.
   (function(){
     var last = 0;
     map.on('move', function(){
+      if (window._zoomFreeze) return;
       var now = Date.now();
       if (now - last < 120) return;
       last = now;
       if (mapRenderer && mapRenderer._map && mapRenderer._update) mapRenderer._update();
     });
+  })();
+
+  // ── Popups above the starfield + play frame ──
+  // The map-pane's translate3d creates a CSS stacking context, trapping the
+  // popup pane's z-index 700 UNDER the fixed starfield (z 620) and gold frame
+  // (z 640) — so a popup overhanging the frame hole was covered, forcing the
+  // player to zoom in just to read it. Escape the popup pane to the map
+  // container (a starfield sibling) and mirror the map-pane transform so
+  // geographic anchoring survives pans and zooms. Tooltips (permanent city
+  // labels) deliberately stay trapped: the starfield is what masks them
+  // outside the play frame.
+  (function(){
+    var mapPane = map.getPane('mapPane');
+    var popupPane = map.getPane('popupPane');
+    if (!mapPane || !popupPane) return;
+    map.getContainer().appendChild(popupPane);   // escape the stacking context
+    popupPane.style.zIndex = '700';              // now competes globally: above 620/640
+    function syncPopupPane(){
+      popupPane.style.transform = mapPane.style.transform || '';
+    }
+    map.on('move zoom zoomanim moveend zoomend viewreset', syncPopupPane);
+    syncPopupPane();
   })();
 
   // ── Faction lookup ────────────────────────────────────────────────────────
@@ -12745,7 +12790,19 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 2px r
   <div class="sp-card">
     <h2>Campaign Saves</h2>
     <div class="sp-sub">Stored in this browser · export a file to back up or move a save</div>
-    <div id="sp-mobile-note" style="display:none">&#9888; Mobile browsers can erase saved games after ~7 days without a visit &mdash; <b>Export</b> your save to a file after meaningful progress. An exported file lives in your Files app where the browser can&rsquo;t auto-clear it, and <b>Import</b> brings it back any time, on any device.</div>
+    <div id="sp-mobile-note" style="display:none">
+      <span>&#9888; Saved games <b>may be deleted</b> automatically <b>unless you protect them</b>.</span>
+      <button id="sp-learn-btn" type="button">Learn More</button>
+    </div>
+    <div id="sp-learn-overlay">
+      <div id="sp-learn-box">
+        <h3>Protecting Your Saves</h3>
+        <p>To free up space, mobile browsers &mdash; especially Safari on iPhone and iPad &mdash; automatically erase a website&rsquo;s stored data, <b>including saved games</b>, after about <b>7 days without a visit</b>.</p>
+        <p><b>Export your saves.</b> Tap <b>Export</b> on a save slot to download it as a file. The file lives in your Files app, where the browser can never auto-delete it, and <b>Import</b> restores it any time &mdash; on this device or another.</p>
+        <p><b>Add the game to your Home Screen.</b> Open the <b>title screen</b> in Safari and tap <b>Share</b> &#9654; <b>Add to Home Screen</b>. One tap brings you back to the game, and regular visits keep the browser&rsquo;s cleanup timer from ever running out.</p>
+        <button id="sp-learn-close" type="button">Close</button>
+      </div>
+    </div>
     <div id="sp-slots"></div>
     <button class="sp-close" onclick="window.closeSavePanel && window.closeSavePanel()">Close</button>
   </div>
@@ -14718,8 +14775,14 @@ function ptlExportSave(id) {
   try {
     if ((window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window) {
       var _mn = document.getElementById('sp-mobile-note');
-      if (_mn) _mn.style.display = 'block';
+      if (_mn) _mn.style.display = 'flex';
     }
+    var _lb = document.getElementById('sp-learn-btn');
+    var _lo = document.getElementById('sp-learn-overlay');
+    var _lc = document.getElementById('sp-learn-close');
+    if (_lb && _lo) _lb.onclick = function(){ _lo.classList.add('open'); };
+    if (_lc && _lo) _lc.onclick = function(){ _lo.classList.remove('open'); };
+    if (_lo) _lo.onclick = function(e){ if (e.target === _lo) _lo.classList.remove('open'); };
   } catch (e) {}
   var _fi=document.getElementById('sp-import-file');
   if(_fi) _fi.addEventListener('change', function(){
