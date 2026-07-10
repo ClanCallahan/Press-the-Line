@@ -3,11 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<link rel="manifest" href="manifest.json">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Press the Line">
 <meta name="theme-color" content="#0d0a03">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <title>Press the Line</title>
@@ -639,35 +634,6 @@ function quit() {
     +'<button onclick="window.location.reload()" style="margin-top:32px;background:transparent;border:1px solid rgba(100,80,30,.4);color:#6a5828;font-family:Cinzel,serif;font-size:12px;letter-spacing:3px;padding:10px 24px;cursor:pointer;border-radius:3px;">Return</button>'
     +'</div>';
 }
-</script>
-<div id="a2hs-hint" style="display:none; position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:400; max-width:min(92vw,520px); background:linear-gradient(180deg,rgba(26,19,6,.96),rgba(13,10,3,.96)); border:1px solid rgba(201,168,76,.55); border-radius:8px; padding:10px 34px 10px 12px; color:#e8d8a8; font:11px/1.5 Georgia,serif; letter-spacing:.4px; box-shadow:0 4px 18px rgba(0,0,0,.6);">
-  &#128241; Playing on iPhone or iPad? Install the game <b>from this screen</b>: tap <b>Share</b> &#9654; <b>Add to Home Screen</b>. The installed app is protected from Safari&rsquo;s 7&#8209;day storage cleanup.
-  <button id="a2hs-hint-x" style="position:absolute; top:4px; right:6px; background:none; border:none; color:#c9a84c; font-size:16px; cursor:pointer; padding:4px;">&times;</button>
-</div>
-<script>
-// iOS "Add to Home Screen" hint. iOS ignores manifest start_url and installs
-// whatever page is open, so the instruction must live HERE on the title
-// screen — installing from the campaign map would capture the wrong URL.
-// Shown only on iOS (incl. iPadOS masquerading as Mac), only outside an
-// installed app, and only until dismissed. The dismissal key deliberately
-// avoids the ptl.* prefix so the new-game wipe can't resurrect the hint.
-(function(){
-  try {
-    var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    var standalone = (navigator.standalone === true) ||
-                     (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
-    if (!ios || standalone || localStorage.getItem('ptlA2hsHintHidden')) return;
-    var el = document.getElementById('a2hs-hint');
-    if (!el) return;
-    el.style.display = 'block';
-    var x = document.getElementById('a2hs-hint-x');
-    if (x) x.onclick = function(){
-      el.style.display = 'none';
-      try { localStorage.setItem('ptlA2hsHintHidden', '1'); } catch (e) {}
-    };
-  } catch (e) {}
-})();
 </script>
 </body>
 </html>
