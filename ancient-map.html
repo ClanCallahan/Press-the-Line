@@ -1599,32 +1599,42 @@ function troopIconSVG(sub, px) {
   // scaling stays, which is stock Leaflet behavior and effectively
   // invisible at that duration.
   (function(){
-    var snap = null, fromZoom = null;
+    var baseW = null, fromZoom = null;   // path → width at first sight this gesture
+    function allPaths(){
+      return mapRenderer._container ? mapRenderer._container.querySelectorAll('path') : [];
+    }
     map.on('zoomstart', function(){
       fromZoom = map.getZoom();
-      snap = [];
-      try {
-        var paths = mapRenderer._container ? mapRenderer._container.querySelectorAll('path') : [];
-        for (var i = 0; i < paths.length; i++) {
-          var w = parseFloat(paths[i].getAttribute('stroke-width'));
-          if (isFinite(w) && w > 0) snap.push([paths[i], w]);
-        }
-      } catch (e) { snap = null; }
+      baseW = (typeof WeakMap === 'function') ? new WeakMap() : null;
     });
     map.on('zoom', function(){
-      if (!snap || fromZoom == null) return;
+      if (!baseW || fromZoom == null) return;
       var s = map.getZoomScale(map.getZoom(), fromZoom);
       if (!isFinite(s) || s <= 0) return;
-      for (var i = 0; i < snap.length; i++) {
-        snap[i][0].setAttribute('stroke-width', snap[i][1] / s);
-      }
+      try {
+        var paths = allPaths();
+        for (var i = 0; i < paths.length; i++) {
+          var p = paths[i], w = baseW.get(p);
+          if (w == null) {                          // first sight (incl. mid-gesture births)
+            w = parseFloat(p.getAttribute('stroke-width'));
+            if (!isFinite(w) || w <= 0) continue;
+            baseW.set(p, w);
+          }
+          p.setAttribute('stroke-width', w / s);
+        }
+      } catch (e) {}
     });
     map.on('zoomend', function(){
-      if (!snap) return;
-      for (var i = 0; i < snap.length; i++) {
-        snap[i][0].setAttribute('stroke-width', snap[i][1]);
+      if (baseW) {
+        try {
+          var paths = allPaths();
+          for (var i = 0; i < paths.length; i++) {
+            var w = baseW.get(paths[i]);
+            if (w != null) paths[i].setAttribute('stroke-width', w);
+          }
+        } catch (e) {}
       }
-      snap = null;
+      baseW = null; fromZoom = null;
     });
   })();
 
@@ -2196,7 +2206,11 @@ function troopIconSVG(sub, px) {
   });
   map.on('zoomend', function(){
     if (_zoomThawTimer) clearTimeout(_zoomThawTimer);
-    _zoomThawTimer = setTimeout(function(){ window._zoomFreeze = false; _zoomThawTimer = null; }, ZOOM_THAW_MS);
+    _zoomThawTimer = setTimeout(function(){
+      window._zoomFreeze = false; _zoomThawTimer = null;
+      // Flush a route rebuild that was requested (and deferred) mid-gesture.
+      try { if (typeof window.renderRoutes === 'function' && window._routesDirty && window._routesDirty()) window.renderRoutes(); } catch (e) {}
+    }, ZOOM_THAW_MS);
   });
 
   var _enemyFaction  = playerSide === 'greece' ? 'P' : 'G';
@@ -2728,7 +2742,15 @@ function troopIconSVG(sub, px) {
   // Route display layer
   var routeLayerGroup = L.layerGroup().addTo(map);
 
+  var _routesDirtyDuringZoom = false;
   function renderRoutes() {
+    // Never rebuild vectors mid-zoom-gesture: a path created while the SVG
+    // container carries the gesture's CSS scale transform gets projected at
+    // the live zoom AND scaled on top of that — double-zoomed, fat, and
+    // invisible to the stroke-width compensation's zoomstart snapshot. The
+    // routes already on screen track the gesture correctly, so keep them and
+    // re-render once the freeze thaws.
+    if (window._zoomFreeze) { _routesDirtyDuringZoom = true; return; }
     routeLayerGroup.clearLayers();
     armies.forEach(function(a) {
       if (!a.moving || !a.movePath || a.movePath.length < 2) return;
@@ -2795,6 +2817,7 @@ function troopIconSVG(sub, px) {
   }
 
   window.renderRoutes = renderRoutes;
+  window._routesDirty = function(){ var d = _routesDirtyDuringZoom; _routesDirtyDuringZoom = false; return d; };
   function startArmyMoveToCity(armyIdx, destCityName, destLat, destLon) {
     var a = armies[armyIdx];
     if (!a) return false;
