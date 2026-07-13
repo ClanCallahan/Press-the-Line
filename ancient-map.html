@@ -25,13 +25,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0d1f35;font-family:
    oversize approach is removed — overlapping opaque tiles under plus-lighter
    would brighten instead.) */
 .leaflet-tile-container img.leaflet-tile{mix-blend-mode:plus-lighter;}
-/* Constant road/route thickness while zooming: during a pinch or wheel zoom
-   Leaflet scales the whole SVG overlay with a CSS transform, so stroke widths
-   fattened/thinned with the gesture (city markers reposition without scaling,
-   which is why they looked right). non-scaling-stroke renders stroke width in
-   screen space, immune to the transform — dash patterns still stretch
-   transiently, which reads naturally. */
-.leaflet-overlay-pane svg path{vector-effect:non-scaling-stroke;}
+
 #title-bar{position:fixed;top:0;left:0;right:0;z-index:999;padding:9px 16px 13px;background:linear-gradient(180deg,rgba(4,10,20,.94)0%,transparent 100%);color:#c9a84c;font-size:clamp(15px,3.5vw,26px);letter-spacing:4px;text-align:center;font-variant:small-caps;text-shadow:0 0 24px rgba(201,168,76,.5),0 2px 4px rgba(0,0,0,.9);pointer-events:none;}
 #title-bar .sub1{font-size:.6em;letter-spacing:5px;color:#7a6028;display:block;margin-top:2px;}
 #title-bar .sub2{font-size:1em;letter-spacing:5px;color:#c9a84c;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px;}
@@ -1592,6 +1586,48 @@ function troopIconSVG(sub, px) {
     syncPopupPane();
   })();
 
+  // ── Constant road/supply-line thickness through a pinch ──
+  // During a zoom gesture Leaflet scales the <svg> ELEMENT with a CSS
+  // transform, so stroke widths fattened/thinned with it (vector-effect:
+  // non-scaling-stroke can't help — it only neutralizes transforms inside
+  // the SVG coordinate system, and this one is outside it). Instead:
+  // snapshot every path's stroke-width at zoomstart, divide by the live
+  // gesture scale on each 'zoom' event (a pinch fires them continuously),
+  // and restore at zoomend — Leaflet then re-projects the geometry at the
+  // new zoom with the original widths. Desktop's brief animated wheel-zoom
+  // is a CSS transition with no per-frame events; its ~0.25s transient
+  // scaling stays, which is stock Leaflet behavior and effectively
+  // invisible at that duration.
+  (function(){
+    var snap = null, fromZoom = null;
+    map.on('zoomstart', function(){
+      fromZoom = map.getZoom();
+      snap = [];
+      try {
+        var paths = mapRenderer._container ? mapRenderer._container.querySelectorAll('path') : [];
+        for (var i = 0; i < paths.length; i++) {
+          var w = parseFloat(paths[i].getAttribute('stroke-width'));
+          if (isFinite(w) && w > 0) snap.push([paths[i], w]);
+        }
+      } catch (e) { snap = null; }
+    });
+    map.on('zoom', function(){
+      if (!snap || fromZoom == null) return;
+      var s = map.getZoomScale(map.getZoom(), fromZoom);
+      if (!isFinite(s) || s <= 0) return;
+      for (var i = 0; i < snap.length; i++) {
+        snap[i][0].setAttribute('stroke-width', snap[i][1] / s);
+      }
+    });
+    map.on('zoomend', function(){
+      if (!snap) return;
+      for (var i = 0; i < snap.length; i++) {
+        snap[i][0].setAttribute('stroke-width', snap[i][1]);
+      }
+      snap = null;
+    });
+  })();
+
   // ── Faction lookup ────────────────────────────────────────────────────────
   var factionLookup = {};
   [
@@ -2717,6 +2753,36 @@ function troopIconSVG(sub, px) {
       if (flow._path) {
         flow._path.style.animation = 'routeFlow 0.55s linear infinite';
         flow._path.style.strokeLinecap = 'round';
+      }
+
+      // Direction arrows along the remaining path — same construction as the
+      // tutorial's path arrows (per-segment screen bearing, even arc-length
+      // spacing), in the route's flow color, pointing at the destination.
+      var segs = [], totalLen = 0, si;
+      for (si = 0; si < remaining.length - 1; si++) {
+        var rp = remaining[si], rq = remaining[si + 1];
+        var dLat = rq[0] - rp[0], dLon = rq[1] - rp[1];
+        var segLen = Math.sqrt(dLat * dLat + dLon * dLon);
+        segs.push({ p: rp, q: rq, len: segLen,
+                    brng: Math.atan2(-dLat, dLon) * 180 / Math.PI, start: totalLen });
+        totalLen += segLen;
+      }
+      var ARROW_STEP = 0.3;  // ° of arc-length between arrows (sparser than the tutorial's dense file)
+      for (var ad = ARROW_STEP * 0.6; ad < totalLen - 0.1; ad += ARROW_STEP) {
+        var seg = segs[segs.length - 1];
+        for (si = 0; si < segs.length; si++) {
+          if (ad <= segs[si].start + segs[si].len) { seg = segs[si]; break; }
+        }
+        var at = seg.len ? (ad - seg.start) / seg.len : 0;
+        var aLat = seg.p[0] + (seg.q[0] - seg.p[0]) * at;
+        var aLon = seg.p[1] + (seg.q[1] - seg.p[1]) * at;
+        var aIcon = L.divIcon({
+          className: 'ptl-route-arrow',
+          html: '<span style="transform:rotate(' + seg.brng.toFixed(1) + 'deg);color:' + flowColor + ';">\u27A4</span>',
+          iconSize: [18, 18], iconAnchor: [9, 9]
+        });
+        L.marker([aLat, aLon], { icon: aIcon, interactive: false, keyboard: false, zIndexOffset: -900 })
+          .addTo(routeLayerGroup);
       }
 
       // Destination marker
@@ -15740,6 +15806,11 @@ body.ptl-tut-allow-time #time-btn{
 
 /* Merge step: repeated arrows along the Athens→Miletus road. */
 .ptl-merge-arrow{ background:none !important; border:none !important; display:flex; align-items:center; justify-content:center; }
+.ptl-route-arrow{ background:none !important; border:none !important; display:flex; align-items:center; justify-content:center; }
+.ptl-route-arrow span{
+  display:inline-block; font-size:17px; line-height:1; opacity:.92;
+  text-shadow:0 0 6px currentColor, 0 0 2px #000;  /* glow picks up the route color */
+}
 .ptl-merge-arrow span{
   display:inline-block; font-size:26px; line-height:1; color:#fff3a8;
   text-shadow:0 0 11px rgba(255,228,90,1), 0 0 5px rgba(255,232,120,.95), 0 0 2px #000;
