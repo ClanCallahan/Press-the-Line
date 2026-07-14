@@ -1674,6 +1674,9 @@ function cavTriFull(pad) { return cavTriVerts(CAV_ROWS, pad); }
 // SEP_DIST = 99% of largest formation dimension → ≤1% overlap from any direction
 const SEP_DIST  = Math.round(Math.max(FORM_W, FORM_H) * 0.99);
 const SEP_FORCE = 8;
+const SEP_MAX_SPEED = 220;  // px/s cap on total separation displacement — deep pileups un-stack gradually; flings impossible by construction
+const SEP_DT_MAX    = 0.08; // clamp the separation timestep so frame hitches / fast-forward can't multiply one frame's push
+const SEP_DEADZONE  = 1.5;  // px of overlap below which a pair generates no push (stops compressed-line trembling)
 let gameScene = null, soldiers = [], arrows = [];
 let phase = 'draw', battleStarted = false, battleOver = false;
 // Incremental deploy: army creation is queued and drained a few formations per
@@ -3986,8 +3989,12 @@ function update(time, delta) {
       //     edge-to-edge distance), full force when they start overlapping
       //     more than 50% (d < minDist * 0.5). This lets friendly units drift
       //     through each other slowed-down, but caps stacking at half overlap.
-      const FRIENDLY_PASS_FRICTION = 0.18;
-      const FRIENDLY_OVERLAP_THRESHOLD = 0.5; // d/minDist below this = full force
+      // Friendly melee pairs resist stacking much earlier and harder than
+      // other friendly pairs — piled-up unmounted melee was overlapping
+      // several formations deep at the line.
+      const _fMeleePair = s.kind === 'melee' && o.kind === 'melee';
+      const FRIENDLY_PASS_FRICTION = _fMeleePair ? 0.45 : 0.18;
+      const FRIENDLY_OVERLAP_THRESHOLD = _fMeleePair ? 0.8 : 0.5; // d/minDist below this = full force
       let pairScale = 1.0;
       if (!generalBlockedByMelee && !friendlyEngagedBlocker && s.team === o.team) {
         pairScale = (d < minDist * FRIENDLY_OVERLAP_THRESHOLD)
@@ -3995,7 +4002,7 @@ function update(time, delta) {
           : FRIENDLY_PASS_FRICTION;   // shallow contact — light friction
       }
 
-      if (d>0&&d<minDist) {
+      if (d>0&&d<minDist-SEP_DEADZONE) {   // deadzone: hairline contact generates no push
         const isEnemy = s.team !== o.team;
         // Special case: general blocked by engaged melee — use full force, no cavScale reduction
         const genBlockedByEngagedMelee = s.kind === 'general' && o.kind === 'melee' && o.isEngaged;
@@ -4005,7 +4012,7 @@ function update(time, delta) {
         // Friendly deep-overlap also uses full force so stacking resolves.
         const friendlyDeepOverlap = (s.team === o.team) && (d < minDist * FRIENDLY_OVERLAP_THRESHOLD);
         const cavScale = (genBlockedByEngagedMelee || friendlyEngagedBlockerFullForce || friendlyDeepOverlap) ? 1.0
-          : (!isEnemy && (s.kind==='cavalry' || o.kind==='cavalry' || s.kind==='general' || o.kind==='general')) ? 0.2 : 1.0;
+          : (!isEnemy && (s.kind==='cavalry' || o.kind==='cavalry' || s.kind==='general' || o.kind==='general')) ? 0.3 : 1.0;
         let strength = (minDist-d)/minDist * cavScale;
         const forceScale = genBlockedByEngagedMelee ? 6.0
           : isEnemy ? 5.0 : (!isEnemy && s.kind==='melee' && o.kind==='melee') ? 4.0 : 1.0;
@@ -4035,8 +4042,17 @@ function update(time, delta) {
       }
     }
     if (pushX!==0||pushY!==0) {
-      const nx=Phaser.Math.Clamp(sx+pushX*SEP_FORCE*dt,8,W-8);
-      const ny=Phaser.Math.Clamp(sy+pushY*SEP_FORCE*dt,14,H-8);
+      // Clamp the timestep, then cap the TOTAL summed displacement. Without
+      // the cap, a unit overlapped by 10-15 neighbors accumulated a huge
+      // one-frame push (forces sum unbounded), landed inside another crowd,
+      // and got blasted again — the "flung across the map" bug. dt scales
+      // with gameSpeed, so fast-forward and frame hitches multiplied it.
+      const sdt = Math.min(dt, SEP_DT_MAX);
+      let mvx = pushX*SEP_FORCE*sdt, mvy = pushY*SEP_FORCE*sdt;
+      const mvMag = Math.hypot(mvx, mvy), mvMax = SEP_MAX_SPEED * sdt;
+      if (mvMag > mvMax) { mvx *= mvMax/mvMag; mvy *= mvMax/mvMag; }
+      const nx=Phaser.Math.Clamp(sx+mvx,8,W-8);
+      const ny=Phaser.Math.Clamp(sy+mvy,14,H-8);
       if      (!isBlocked(nx,ny)) { s.container.x=nx; s.container.y=ny; }
       else if (!isBlocked(nx,sy)) { s.container.x=nx; }
       else if (!isBlocked(sx,ny)) { s.container.y=ny; }
